@@ -1,15 +1,19 @@
 ---
 name: vbrain-add-routine
-description: Adiciona uma rotina ao vbrain (~/vbrain/routines/routines.yml) com slug, descrição, cron schedule e prompt. Computa next_run inicial deterministicamente via fugit. Depois invoca /vbrain-routine pra garantir que o watch loop esteja ativo. Use quando o usuário pedir "cria uma rotina", "adiciona rotina", "rotina que roda toda manhã às 6h", "rotina horária", ou "vbrain-add-routine".
-allowed-tools: Bash, Read, Write, AskUserQuestion, Skill
+description: Adiciona uma rotina ao vbrain (~/vbrain/routines/routines.yml) com slug, descrição, cron schedule e prompt. Computa next_run inicial deterministicamente via fugit. Pergunta se quer testar agora via slug. NÃO bootstrappa nenhum loop nem cron — isso é responsabilidade do /vbrain-routine quando o usuário invocar. Use quando o usuário pedir "cria uma rotina", "adiciona rotina", "rotina que roda toda manhã às 6h", "rotina horária", ou "vbrain-add-routine".
+allowed-tools: Bash, Read, Write, AskUserQuestion, Agent
 ---
 
 # vbrain-add-routine
 
 Cria uma rotina no `~/vbrain/routines/routines.yml`. O script Ruby
 computa `next_run` deterministicamente (fugit) a partir do cron + agora.
-Depois esta skill invoca `/vbrain-routine` (sem args) — que garante o
-watch loop ativo e dispara qualquer rotina já vencida.
+Opcionalmente, pergunta se quer **testar agora** via sub-agente (manual
+trigger via slug, não altera state).
+
+**Esta skill NUNCA toca em `/loop`, `CronCreate`, ou `/vbrain-routine` em
+modo watch.** Bootstrap do watch loop é responsabilidade exclusiva do
+`/vbrain-routine` quando invocado pelo usuário.
 
 ## Inputs
 
@@ -49,9 +53,10 @@ de Brasília. Mencione isso se relevante (ex.: usuário viajando).
 
 **Prompt**:
 > "Cole o prompt. Pode usar markdown. Geralmente referencia outras skills
-> (`/vbrain-query-knowledge ...`), MCPs (`mcp__claude_ai_Gmail`,
-> `mcp__claude_ai_Google_Calendar`), ou instruções de alto nível. O
-> sub-agente que rodar essa rotina executa esse texto como instrução."
+> (slash commands tipo `/vbrain-query-knowledge`), ferramentas MCP
+> (`mcp__*` — quaisquer que sua sessão tiver carregadas), ou instruções
+> de alto nível. O sub-agente que rodar essa rotina executa esse texto
+> como instrução."
 
 ### 2. Detectar colisão de slug
 
@@ -91,15 +96,32 @@ BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Us
 
 (Use `routine: substitui '<slug>'` quando `--replace`.)
 
-### 6. Bootstrap do watch (AUTO)
+### 6. Oferecer teste agora (opcional)
 
-Invoque a skill `vbrain-routine` via `Skill` tool **sem args**. Isso:
-- Faz o tick atual (não dispara essa rotina nova porque next_run ainda
-  é futuro).
-- Garante `/loop 1m /vbrain-routine` ativo, de forma que daqui pra frente
-  o watch rode sozinho.
+Use `AskUserQuestion`:
 
-Não pule esse passo — o ponto da skill é "adicionar = pronto pra rodar".
+> "Rotina criada. Quer testar agora? (manual trigger via slug, não conta
+> como tick, não altera next_run)"
+> 1. Sim, rodar agora (Recommended)
+> 2. Não, só salvar
+
+Se "Sim": lance **um** `Agent` (`subagent_type: "claude"`) com o template
+de execução de rotina:
+
+```
+Você está executando a rotina vbrain "<SLUG>": <DESCRIPTION>
+
+Instrução:
+
+<PROMPT>
+
+Quando terminar, devolva um único bloco markdown auto-contido com o
+resultado (sem prefixos). Se chamar uma skill (slash command), invoque
+via `Skill` tool. Se chamar uma ferramenta MCP (qualquer `mcp__*`),
+invoque direto — use o que sua sessão tiver disponível, não enumere.
+```
+
+Mostre o output do sub-agente abaixo do report (passo 7).
 
 ### 7. Reportar
 
@@ -107,12 +129,19 @@ Mostre:
 - `slug`, `description`, `schedule` (cron + tradução humana)
 - `next_run` (em horário local + UTC entre parênteses)
 - Primeiras linhas do `prompt`
-- Confirme que o watch loop foi iniciado/já tava ativo
-- Como testar imediatamente: "rode `/vbrain-routine <slug>` pra forçar
-  agora (não conta como tick — não altera next_run)."
+- Se o usuário pediu teste: o output do sub-agente.
+- **Como iniciar o watch loop** (separadamente): "Pra essa rotina rodar
+  automaticamente nos horários do cron, invoque `/vbrain-routine` (sem
+  args) quando quiser começar o watch — ele bootstrappa o `/loop 15m`
+  com guarda CronList."
 
 ## Regras
 
+- **NUNCA** invoque `/loop`, `Skill loop`, `CronCreate`, ou `/vbrain-routine`
+  sem args. Esta skill só altera o YAML + opcionalmente dispara UM
+  sub-agente pra teste manual via slug. Bootstrap do watch é
+  responsabilidade exclusiva do `/vbrain-routine` quando o usuário
+  invocar.
 - **Nunca** escreva direto em `routines.yml` — sempre pelo script.
 - **Nunca** invente prompt — pegue literal do usuário.
 - **Sempre** confirme a tradução natural → cron com o usuário antes de

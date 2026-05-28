@@ -1,7 +1,7 @@
 ---
 name: vbrain-routine
 description: Watch loop das rotinas do vbrain. Verifica em ~/vbrain/routines/routines.yml quais rotinas têm next_run vencido, dispara sub-agente paralelo pra cada, e a próxima execução é calculada deterministicamente pelo cron (fugit). Se chamado sem args, esse é o comportamento padrão (watch). Use quando o usuário pedir "roda minhas rotinas", "vbrain-routine", "executa rotina morning-brief", "fica rodando em background", ou referenciar uma rotina pelo slug.
-allowed-tools: Bash, Read, Agent, AskUserQuestion, Skill
+allowed-tools: Bash, Read, Agent, AskUserQuestion, Skill, CronList
 ---
 
 # vbrain-routine
@@ -9,12 +9,12 @@ allowed-tools: Bash, Read, Agent, AskUserQuestion, Skill
 Loop de execução das rotinas. **Watch é o default**: sem args, esta skill
 roda um "tick" (claim de rotinas vencidas + dispatch + atualização de
 `next_run`) e garante que o `/loop` global esteja registrado pra rearmar
-sozinho a cada minuto.
+sozinho a cada 15 minutos.
 
 ## Inputs (formas aceitas)
 
 - **(vazio)** → **tick + watch**: identifica rotinas com `next_run <= now`,
-  dispara sub-agente paralelo pra cada, deixa o `/loop 1m /vbrain-routine`
+  dispara sub-agente paralelo pra cada, deixa o `/loop 15m /vbrain-routine`
   rodando. Idempotente.
 - **`<slug>`** → executa só essa rotina **agora** (manual trigger), sem
   alterar `next_run` nem `last_run`.
@@ -60,15 +60,43 @@ Instrução:
 
 Quando terminar, devolva um único bloco markdown auto-contido com o
 resultado (sem prefixos do tipo "aqui está"). Se a instrução chamar
-/vbrain-query-knowledge ou outra skill vbrain, invoque via Skill tool.
-Se chamar um MCP (mcp__claude_ai_Google_Calendar, mcp__claude_ai_Gmail,
-etc.), invoque direto. Datas relativas como "hoje" ou "essa semana" são
-em relação ao momento da execução.
+uma skill (slash command), invoque via `Skill` tool. Se chamar uma
+ferramenta MCP (qualquer `mcp__*`), invoque direto — não enumere as
+disponíveis; use as que sua sessão tiver carregadas. Datas relativas
+como "hoje" ou "essa semana" são em relação ao momento da execução.
 ```
 
-### 3. Garantir o /loop ativo
+### 3. Garantir o /loop ativo (com guarda anti-recursão)
 
-Invoque a skill `loop` via `Skill` tool com `args: "1m /vbrain-routine"`.
+**CRÍTICO**: o `/loop` quando chamado executa o prompt **imediatamente**
+além de agendar o cron. Se essa skill chamar `/loop /vbrain-routine` sem
+guarda, entra em recursão infinita (loop chama vbrain-routine que chama
+loop que chama vbrain-routine…).
+
+Sempre cheque PRIMEIRO via `CronList` se já existe job recurring com
+prompt `/vbrain-routine`. Pseudocódigo:
+
+```
+crons = CronList()
+already_active = crons.any? { |c| c.recurring && c.prompt =~ %r{^/vbrain-routine\b} }
+
+if already_active:
+  # skip — o cron já existente vai disparar o próximo tick a cada 15min
+else:
+  Skill(skill: "loop", args: "15m /vbrain-routine")
+```
+
+A primeira invocação manual de `/vbrain-routine` (ou de
+`/vbrain-add-routine` que termina invocando esta) entra no ramo `else`
+e registra o cron. As invocações subsequentes (disparadas pelo próprio
+cron firing) entram no ramo `if` e pulam — sem recursão.
+
+**Granularidade**: como o tick acontece a cada 15min, esse é o piso da
+detecção. Rotinas com cron mais agressivo (`*/5 * * * *`) sofrem atraso
+de até 15min — o sub-agente vai disparar no próximo tick que vencer o
+`next_run`. Pra rotinas mission-critical sub-15min, o usuário pode rodar
+`/loop 5m /vbrain-routine` manualmente (e cancelar o de 15min via
+`CronDelete`).
 Se já estiver ativo, `/loop` provavelmente recusa ou substitui — siga o
 feedback dele e **não pare** o fluxo por isso (loop pode já estar
 funcionando).
@@ -81,7 +109,7 @@ Mostre:
 # Rotinas executadas (N)
 
 > tick @ <now ISO8601 UTC>
-> próximo tick automático em 1m via /loop
+> próximo tick automático em 15m via /loop
 
 ## <slug 1> — <description 1>
 

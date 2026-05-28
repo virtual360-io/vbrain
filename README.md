@@ -57,7 +57,7 @@ estrutura de índice é o SQLite derivado.
 | `/vbrain-query-knowledge <query>`   | Roda FTS5 via `query.rb`; páginas `kind: realtime` disparam handler MCP em vez de retornar snippet |
 | `/vbrain-add-realtime-knowledge`    | Conecta fonte realtime (hoje: Google Calendar e Gmail via MCP) e cria página fantasma em `wiki/_realtime/` |
 | `/vbrain-add-routine`               | Adiciona rotina (slug, descrição, cron, prompt) e bootstrap do watch loop                            |
-| `/vbrain-routine [slug\|status]`    | **Watch (default)**: claim de rotinas vencidas via `run_due_routines.rb`, dispatch paralelo, re-armar `/loop 1m` |
+| `/vbrain-routine [slug\|status]`    | **Watch (default)**: claim de rotinas vencidas via `run_due_routines.rb`, dispatch paralelo, re-armar `/loop 15m` |
 
 As skills moram em `.claude/skills/vbrain-*/` neste repo. O `scripts/install.rb`
 copia tudo para `~/.claude/skills/` reescrevendo paths relativos por absolutos
@@ -191,7 +191,7 @@ routines:
    atomicamente: identifica rotinas com `next_run <= now`, avança o
    `next_run` (próximo tick do cron), retorna a lista pra skill executar.
    Cada rotina vai pra um **sub-agente paralelo**. Em seguida re-arma
-   `/loop 1m /vbrain-routine`.
+   `/loop 15m /vbrain-routine` (granularidade de detecção ~15min).
 3. Semântica é **at-most-once**: se o sub-agente falhar, aquele run é
    perdido (não re-tentamos). Pra forçar execução manual, use
    `/vbrain-routine <slug>` (não altera state).
