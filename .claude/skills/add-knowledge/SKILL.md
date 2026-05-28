@@ -99,7 +99,8 @@ A saída tem `{"inserted":N,"updated":N,"deleted":N}`. Triggers FTS5 mantêm o
 Mostre:
 - Tipo detectado (`source_type`)
 - Lista de paths gerados em `wiki/`
-- Total de páginas no banco: `bundle exec sqlite3 db/vbrain.sqlite3 "SELECT COUNT(*) FROM pages;"`
+- Estatísticas do banco: `bundle exec ruby scripts/stats.rb` (retorna JSON com
+  total de páginas, distribuição por kind e 5 mais recentes)
 
 ## Regras duras
 

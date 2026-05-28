@@ -56,7 +56,7 @@ class WritePagesCLITest < Minitest::Test
       assert_equal 2, result["count"]
       assert_equal 2, result["written"].uniq.size, "slugs must be unique: #{result['written']}"
       result["written"].each do |rel|
-        abs = File.join(VBrain::Paths::WIKI_DIR, rel)
+        abs = File.join(VBrain::Paths.wiki_dir, rel)
         @paths_to_cleanup << abs
         assert File.exist?(abs)
         parsed = VBrain::Page.parse(abs)

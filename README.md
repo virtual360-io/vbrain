@@ -6,11 +6,14 @@ a duas Claude Code skills + scripts Ruby + SQLite FTS5.
 
 ## Como funciona
 
-- **`wiki/`** é a fonte da verdade: markdown com frontmatter YAML, organizado
-  em `concepts/`, `decisions/`, `gotchas/`, `notes/`, `_rules/`.
-- **`raw/`** guarda os originais imutáveis ingeridos.
-- **`db/vbrain.sqlite3`** é o índice derivado (FTS5). Pode ser apagado a
-  qualquer momento — `scripts/reindex.rb` reconstrói lendo `wiki/`.
+- **`~/vbrain/wiki/`** é a fonte da verdade: markdown com frontmatter YAML,
+  organizado em `concepts/`, `decisions/`, `gotchas/`, `notes/`, `_rules/`.
+- **`~/vbrain/raw/`** guarda os originais imutáveis ingeridos.
+- **`~/vbrain/db/vbrain.sqlite3`** é o índice derivado (FTS5). Pode ser
+  apagado a qualquer momento — `scripts/reindex.rb` reconstrói lendo `wiki/`.
+
+A localização da pasta de dados pode ser sobrescrita com `VBRAIN_HOME`. O
+**código** (este repo) fica separado dos dados.
 
 ## Skills
 
@@ -22,9 +25,16 @@ a duas Claude Code skills + scripts Ruby + SQLite FTS5.
 
 ```bash
 bundle install
-mkdir -p raw wiki/{concepts,decisions,gotchas,notes,_rules} db raw/.tmp
-ruby -Ilib -rvbrain/db -e 'VBrain::DB.open {}'
+bundle exec ruby scripts/install.rb            # instala skills em ~/.claude/skills/
 ```
+
+O install é **idempotente** — rode de novo após `git pull` para atualizar.
+Ele reescreve as SKILL.md substituindo paths relativos por absolutos (apontando
+para este repo) e seta `BUNDLE_GEMFILE`, então as skills funcionam de qualquer
+diretório.
+
+`VBRAIN_HOME` pode ser exportado no shell para mover a base para outro lugar
+(ex.: `~/Documents/vbrain`).
 
 ## Testes
 
@@ -33,13 +43,14 @@ bundle exec rake test
 ```
 
 Todo arquivo determinístico (`lib/vbrain/*` e `scripts/*`) tem teste minitest
-correspondente em `test/`.
+correspondente em `test/`. Os testes isolam dados em tmpdir via `VBRAIN_HOME`.
 
 ## Verificação manual
 
 ```bash
 printf "# Postgres\n\nUse REPLICA IDENTITY FULL p/ logical replication.\n" > /tmp/pg.md
-# rode a skill add-knowledge em /tmp/pg.md
+# rode a skill /add-knowledge passando /tmp/pg.md
 bundle exec ruby scripts/query.rb "replica identity" --format markdown
 bundle exec ruby scripts/query.rb "postgres:logical"   # ':' não quebra FTS5
+bundle exec ruby scripts/stats.rb                       # estatísticas do banco
 ```

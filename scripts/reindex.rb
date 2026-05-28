@@ -13,8 +13,8 @@ deleted  = 0
 
 VBrain::DB.open do |db|
   files_on_disk = {}
-  Dir.glob(File.join(VBrain::Paths::WIKI_DIR, "**", "*.md")).each do |abs|
-    rel = abs.sub(VBrain::Paths::WIKI_DIR + "/", "")
+  Dir.glob(File.join(VBrain::Paths.wiki_dir, "**", "*.md")).each do |abs|
+    rel = abs.sub(VBrain::Paths.wiki_dir + "/", "")
     next if rel == "index.md"
 
     parsed = VBrain::Page.parse(abs)

@@ -52,7 +52,7 @@ VBrain::DB.open do |db|
 
   basename = File.basename(path)
   stamp = Time.now.utc.strftime("%Y%m%dT%H%M%SZ")
-  dest = File.join(VBrain::Paths::RAW_DIR, "#{stamp}-#{basename}")
+  dest = File.join(VBrain::Paths.raw_dir, "#{stamp}-#{basename}")
   FileUtils.cp(path, dest)
 
   db.execute(
@@ -61,7 +61,7 @@ VBrain::DB.open do |db|
   )
   raw_id = db.last_insert_row_id
 
-  out_path = File.join(VBrain::Paths::TMP_DIR, "extracted-#{raw_id}.txt")
+  out_path = File.join(VBrain::Paths.tmp_dir, "extracted-#{raw_id}.txt")
   source.extract(path, out_path)
 
   puts JSON.generate(

@@ -30,7 +30,7 @@ VBrain::DB.open do |db|
   raw = db.execute("SELECT path FROM raw_sources WHERE id = ?", [opts[:raw_id]]).first
   abort("raw_id #{opts[:raw_id]} not found") unless raw
   raw_path = raw["path"]
-  raw_rel  = raw_path.sub(VBrain::Paths::ROOT + "/", "")
+  raw_rel  = raw_path.sub(VBrain::Paths.data_home + "/", "")
 
   pages.each do |p|
     category = p.fetch("category")
@@ -40,7 +40,7 @@ VBrain::DB.open do |db|
     body  = p.fetch("body_markdown")
     tags  = (p["tags"] || []).join(",")
 
-    dir = File.join(VBrain::Paths::WIKI_DIR, category)
+    dir = File.join(VBrain::Paths.wiki_dir, category)
     base_slug = VBrain::Slug.from(p["slug_hint"] || title)
     slug = base_slug
     n = 2
@@ -57,7 +57,7 @@ VBrain::DB.open do |db|
       "source_raw" => raw_rel
     }
     full_path = VBrain::Page.write(dir: dir, slug: slug, frontmatter: fm, body: body)
-    rel = full_path.sub(VBrain::Paths::WIKI_DIR + "/", "")
+    rel = full_path.sub(VBrain::Paths.wiki_dir + "/", "")
     written << rel
   end
 end

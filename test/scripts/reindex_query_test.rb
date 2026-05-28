@@ -17,7 +17,7 @@ class ReindexAndQueryCLITest < Minitest::Test
 
     VBrain::DB.open do |db|
       @created_paths.each do |abs|
-        rel = abs.sub(VBrain::Paths::WIKI_DIR + "/", "")
+        rel = abs.sub(VBrain::Paths.wiki_dir + "/", "")
         db.execute("DELETE FROM pages WHERE path = ?", [rel])
       end
     end
@@ -25,7 +25,7 @@ class ReindexAndQueryCLITest < Minitest::Test
 
   def test_reindex_inserts_then_updates_then_deletes
     marker = "marker-#{Time.now.to_f.to_s.tr('.', '')}"
-    dir = File.join(VBrain::Paths::WIKI_DIR, "notes")
+    dir = File.join(VBrain::Paths.wiki_dir, "notes")
     slug = "reindex-test-#{Time.now.to_f.to_s.tr('.', '')}"
     abs = VBrain::Page.write(
       dir: dir,

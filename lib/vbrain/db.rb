@@ -48,7 +48,8 @@ module VBrain
       END;
     SQL
 
-    def self.open(path = Paths::DB_PATH)
+    def self.open(path = nil)
+      path ||= Paths.db_path
       FileUtils.mkdir_p(File.dirname(path)) unless path.to_s == ":memory:"
       db = SQLite3::Database.new(path.to_s)
       db.results_as_hash = true

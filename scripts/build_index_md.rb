@@ -33,6 +33,6 @@ VBrain::DB.open do |db|
   end
 end
 
-out = File.join(VBrain::Paths::WIKI_DIR, "index.md")
+out = File.join(VBrain::Paths.wiki_dir, "index.md")
 File.write(out, lines.join("\n") + "\n")
 puts out
