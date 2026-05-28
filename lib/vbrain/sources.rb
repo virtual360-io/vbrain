@@ -1,9 +1,11 @@
 require_relative "sources/base"
+require_relative "sources/twitter"
+require_relative "sources/url"
 require_relative "sources/text"
 
 module VBrain
   module Sources
-    REGISTRY = [Text].freeze
+    REGISTRY = [Twitter, Url, Text].freeze
 
     def self.detect(path)
       REGISTRY.each do |src|

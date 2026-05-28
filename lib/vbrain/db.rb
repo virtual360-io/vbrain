@@ -12,7 +12,7 @@ module VBrain
         id                INTEGER PRIMARY KEY,
         path              TEXT NOT NULL UNIQUE,
         original_filename TEXT NOT NULL,
-        source_type       TEXT NOT NULL CHECK(source_type IN ('text','transcript','epub','repo','spreadsheet','oneshot')),
+        source_type       TEXT NOT NULL CHECK(source_type IN ('text','transcript','epub','repo','spreadsheet','url','tweet','oneshot')),
         sha256            TEXT NOT NULL UNIQUE,
         ingested_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
       );

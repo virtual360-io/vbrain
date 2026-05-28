@@ -22,7 +22,7 @@ module VBrain
         utf8_text?(path)
       end
 
-      def self.extract(path, out_path)
+      def self.extract(path, out_path, raw_info: {})
         FileUtils.mkdir_p(File.dirname(out_path))
         content = File.read(path)
         File.write(out_path, content)
