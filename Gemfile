@@ -10,3 +10,5 @@ group :development, :test do
   gem "minitest", "~> 5.25"
   gem "rake", "~> 13.2"
 end
+
+gem "playwright-ruby-client", "~> 1.60"

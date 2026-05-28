@@ -58,13 +58,35 @@ class SourcesTwitterTest < Minitest::Test
     assert_includes md, "[x.com/i/article/2059…](http://x.com/i/article/2059581224960835584)"
   end
 
-  def test_extract_from_json_renders_embedded_article_preview
+  def test_extract_from_json_renders_embedded_article_preview_when_no_full_text
     json = File.read(FIXTURE)
     md = VBrain::Sources::Twitter.extract_from_json(json, url: TWEET_URL, id: TWEET_ID)
-    assert_includes md, "## Artigo embutido (preview do syndication)"
+    assert_includes md, "## Artigo embutido"
     assert_includes md, "Using Autoresearch to improve harness skills"
     assert_includes md, "self-improving agents are here"
-    assert_includes md, "body completo do artigo só é acessível com auth"
+    assert_includes md, "body completo do artigo só é acessível"
+  end
+
+  def test_extract_from_json_includes_full_article_when_provided
+    json = File.read(FIXTURE)
+    full = "Using Autoresearch to improve harness skills\n\n" \
+           "self-improving agents are here\nThe most interesting shift in AI right now... " \
+           "(and a lot more content that exceeds the preview length significantly to trigger the threshold). " \
+           "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 8
+    md = VBrain::Sources::Twitter.extract_from_json(json, url: TWEET_URL, id: TWEET_ID,
+                                                     article_full_text: full)
+    assert_includes md, "Body completo"
+    assert_includes md, "Playwright"
+    refute_includes md, "body completo do artigo só é acessível"
+    assert_includes md, "and a lot more content"
+  end
+
+  def test_clean_article_text_strips_x_boilerplate
+    raw = "Don’t miss what’s happening\nLog in\nThe Title\n\nbody starts here\n\n© 2026 X Corp."
+    cleaned = VBrain::Sources::Twitter.clean_article_text(raw, title: "The Title")
+    refute_includes cleaned, "© 2026 X Corp."
+    refute_includes cleaned, "Don’t miss"
+    assert_includes cleaned, "body starts here"
   end
 
   def test_extract_from_json_skips_article_section_when_absent
