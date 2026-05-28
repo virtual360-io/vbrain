@@ -18,6 +18,45 @@ transformar um arquivo bruto em páginas wiki indexadas no vbrain.
 
 ## Passos
 
+### 0. Garantir repo git no `~/vbrain` (apenas no 1º ingest)
+
+Antes de qualquer outra coisa, verifique se `~/vbrain/.git/` existe:
+
+```bash
+test -d ~/vbrain/.git && echo present || echo absent
+```
+
+**Se ausente** (primeira ingestão da base), use `AskUserQuestion` para perguntar:
+
+> "Sua base ainda não é um repositório git. Quero versionar a wiki/raw para
+> você poder revertir/sincronizar entre máquinas. O que prefere?"
+>
+> 1. **Repo privado no GitHub** (Recommended)
+> 2. **Repo público no GitHub**
+> 3. **Só git local, sem GitHub**
+> 4. **Pular versionamento por agora**
+
+Conforme a resposta, rode:
+
+- Privado: `bundle exec ruby scripts/init_repo.rb --github private`
+- Público: `bundle exec ruby scripts/init_repo.rb --github public`
+- Local: `bundle exec ruby scripts/init_repo.rb`
+- Pular: não rode nada, e marque mentalmente que o passo 6 deve ser pulado.
+
+Parse o JSON:
+
+- `{"initialized":true,...,"remote_url":"..."}` → repo pronto, siga.
+- `{"initialized":false,"reason":"already a repo"}` → idempotente, siga.
+- `{"needs_gh":true}` → `gh` não instalado. Use `AskUserQuestion` perguntando
+  se o usuário quer instalar (`brew install gh && gh auth login`). Se sim,
+  rode os comandos e depois re-rode `init_repo.rb`. Se não, caia para "Só git
+  local" (`init_repo.rb` sem `--github`).
+- `{"needs_gh_auth":true}` → `gh` está instalado mas não autenticado.
+  Instrua o usuário a rodar `gh auth login` num terminal interativo (você
+  não consegue rodar comandos interativos), depois re-rode.
+
+**Se presente**: siga direto para o passo 1.
+
 ### 1. Ingerir o raw
 
 ```bash
@@ -96,13 +135,34 @@ o SQLite (`pages` + virtual `pages_fts`); triggers AI/AD/AU sincronizam o FTS5
 automaticamente. Não há `wiki/index.md` — espelhamos o ai-memory, onde a
 única estrutura de índice é o SQLite derivado.
 
-### 6. Reportar ao usuário
+### 6. Commit + push
+
+Se o passo 0 não foi pulado:
+
+```bash
+bundle exec ruby scripts/commit.rb --message "add: <N> páginas de <basename>"
+```
+
+Onde `<N>` é o `count` retornado em 4 e `<basename>` é o nome curto do
+arquivo/URL original. O script é idempotente:
+
+- Se não há mudanças no `~/vbrain/` (caso degenerado: chunker retornou 0
+  páginas), retorna `{"committed":false,"reason":"no changes"}`.
+- Se há mudanças, commita e tenta push automaticamente quando há `origin`
+  configurado (`{"pushed":true}`).
+- Sem remote, só commita local (`{"pushed":false,"reason":"no remote"}`).
+
+Não interrompa o pipeline se o push falhar — o commit local foi feito; reporte
+o erro e siga.
+
+### 7. Reportar ao usuário
 
 Mostre:
 - Tipo detectado (`source_type`)
 - Lista de paths gerados em `wiki/`
 - Estatísticas do banco: `bundle exec ruby scripts/stats.rb` (retorna JSON com
   total de páginas, distribuição por kind e 5 mais recentes)
+- Status do commit/push (sha + remote URL quando aplicável)
 
 ## Regras duras
 
