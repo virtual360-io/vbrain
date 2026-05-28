@@ -1,7 +1,7 @@
 ---
 name: vbrain-query-knowledge
-description: Consulta a base vbrain (SQLite FTS5) e devolve trechos relevantes em markdown. Páginas com kind=realtime disparam handlers ao vivo (Google Calendar via MCP) em vez de retornar o body. Use quando o usuário perguntar algo que pode estar arquivado ("o que eu sei sobre X", "procura no vbrain por Y"), ou quando outro agente precisar de contexto persistido para uma tarefa.
-allowed-tools: Bash, Read, mcp__claude_ai_Google_Calendar__list_events
+description: Consulta a base vbrain (SQLite FTS5) e devolve trechos relevantes em markdown. Páginas com kind=realtime disparam handlers ao vivo (Google Calendar e Gmail via MCP) em vez de retornar o body. Use quando o usuário perguntar algo que pode estar arquivado ("o que eu sei sobre X", "procura no vbrain por Y"), ou quando outro agente precisar de contexto persistido para uma tarefa.
+allowed-tools: Bash, Read, mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread
 ---
 
 # vbrain-query-knowledge
@@ -46,6 +46,7 @@ página em `~/vbrain/wiki/<path>` pra descobrir `source` e parâmetros.
 | `source`    | Handler                                                      |
 |---|---|
 | `gcalendar` | `mcp__claude_ai_Google_Calendar__list_events` (ver 3a)       |
+| `gmail`     | `mcp__claude_ai_Gmail__search_threads` (ver 3b)              |
 | outro       | reporte "fonte realtime `X` não tem handler implementado"    |
 
 **3a. Handler `gcalendar`:**
@@ -85,6 +86,57 @@ Para cada evento retornado, formate:
 
 Se a query menciona alguém específico (ex.: "reunião com Fulano"), filtre
 eventos cujo `summary`, `description` ou `attendees` contenham o nome.
+
+**3b. Handler `gmail`:**
+
+Leia o frontmatter da página, pegue a lista `labels` (cada um com `id`,
+`name`). Monte o `query` do `search_threads` em **Gmail search syntax**:
+
+1. **Label filter** (sempre prepende): `(label:<id1> OR label:<id2> …)`.
+   Para 1 label só, use `label:<id>` sem parênteses. Se a lista de labels
+   estiver vazia (degenerado), não prepende.
+2. **Conteúdo**: extraia os termos significativos da query do usuário e
+   converta pra Gmail syntax:
+   - Nomes/e-mails → `from:` ou `to:` se a query disser quem mandou/recebeu.
+     ("email do João" → `from:João`; sem direção, tente
+     `(from:João OR to:João)`.)
+   - Datas relativas:
+     - "hoje" → `newer_than:1d`
+     - "ontem" → `newer_than:2d older_than:1d`
+     - "essa/esta semana" → `newer_than:7d`
+     - "semana passada" → `newer_than:14d older_than:7d`
+     - "esse mês" → `newer_than:30d`
+   - Datas absolutas → `after:YYYY/MM/DD before:YYYY/MM/DD`.
+   - Anexos → `has:attachment`.
+   - Não lido → `is:unread`.
+   - Assunto explícito → `subject:"<frase>"`.
+   - Palavras-chave restantes vão soltas (são AND por default).
+3. Chame:
+
+```
+mcp__claude_ai_Gmail__search_threads
+  query    = "<label filter> <conteúdo>"
+  pageSize = min(20, limit do query-knowledge)
+```
+
+Para cada thread retornada, formate:
+
+```
+- <data curta> | <from> → <subject>
+  <snippet>
+```
+
+Use o último message da thread como `from`/`subject`/`snippet` (a resposta
+já vem com os campos). Se a thread tem várias mensagens, mostre o número
+entre parênteses: `(N msgs)`.
+
+Se nenhum result voltar, reporte: "Nenhuma thread bate `<query montada>`.
+Tente termos mais gerais ou amplie o range temporal."
+
+Se o usuário pedir o corpo completo de uma thread específica
+("abre essa", "mostra o último email completo"), chame
+`mcp__claude_ai_Gmail__get_thread` com o `threadId` e
+`messageFormat: FULL_CONTENT`.
 
 ### 4. Formatar resposta
 

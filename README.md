@@ -53,7 +53,7 @@ estrutura de índice é o SQLite derivado.
 |---|---|
 | `/vbrain-add-knowledge <path\|url>` | Ingere arquivo/URL → `raw/` → chunker LLM → wiki-writer LLM → `write_pages.rb` → reindex → commit  |
 | `/vbrain-query-knowledge <query>`   | Roda FTS5 via `query.rb`; páginas `kind: realtime` disparam handler MCP em vez de retornar snippet |
-| `/vbrain-add-realtime-knowledge`    | Conecta fonte realtime (hoje: Google Calendar via MCP) e cria página fantasma em `wiki/_realtime/` |
+| `/vbrain-add-realtime-knowledge`    | Conecta fonte realtime (hoje: Google Calendar e Gmail via MCP) e cria página fantasma em `wiki/_realtime/` |
 
 As skills moram em `.claude/skills/vbrain-*/` neste repo. O `scripts/install.rb`
 copia tudo para `~/.claude/skills/` reescrevendo paths relativos por absolutos
@@ -142,14 +142,20 @@ parênteses) antes de mandar pro FTS5.
 ### Realtime (`wiki/_realtime/` + handlers MCP)
 
 Páginas com `kind: realtime` contêm só keywords sintéticas no body — o
-suficiente pra casar no FTS5 (`agenda`, `reunião`, `hoje`, `amanhã`…) — e
-metadados no frontmatter (`source: gcalendar`). A lista real de calendários
-fica em `~/vbrain/config/realtime/gcalendar.yml`, fora do índice.
+suficiente pra casar no FTS5 — e metadados no frontmatter (`source: …` +
+parâmetros). A config real (calendar IDs, label IDs, etc.) fica em
+`~/vbrain/config/realtime/<source>.yml`, fora do índice.
+
+| `source`    | Page             | Body keywords                          | Handler MCP                                                      | Config                                |
+|---|---|---|---|---|
+| `gcalendar` | `gcalendar.md`   | agenda, reunião, hoje, amanhã, semana… | `mcp__claude_ai_Google_Calendar__list_events` (range temporal)   | `calendars: [{id, summary, timezone}]` |
+| `gmail`     | `gmail.md`       | email, e-mail, inbox, mensagem, anexo… | `mcp__claude_ai_Gmail__search_threads` (label filter + Gmail syntax) | `labels: [{id, name}]`                |
 
 Quando `query-knowledge` encontra uma dessas, ele **não** mostra o snippet —
-dispara o handler MCP correspondente (hoje:
-`mcp__claude_ai_Google_Calendar__list_events`) com janela temporal derivada da
-query ("hoje", "essa semana", etc.) e formata o resultado ao vivo.
+dispara o handler MCP correspondente e formata o resultado ao vivo. Pra
+adicionar nova fonte realtime, replique o trio:
+`lib/vbrain/realtime/<source>.rb` (helper), `scripts/add_realtime/<source>.rb`
+(CLI), entrada no dispatcher do `vbrain-query-knowledge`.
 
 ## Diretórios deste repo
 

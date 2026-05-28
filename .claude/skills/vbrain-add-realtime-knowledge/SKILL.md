@@ -1,7 +1,7 @@
 ---
 name: vbrain-add-realtime-knowledge
-description: Conecta uma fonte de "conhecimento realtime" ao vbrain (hoje suporta Google Calendar via MCP). Cria uma página fantasma na wiki/_realtime/ com kind=realtime que casa no FTS5 e dispara handler ao vivo no /vbrain-query-knowledge. Use quando o usuário pedir "conecta meu gcalendar", "adiciona meu calendário", "quero buscar agenda junto", ou "vbrain-add-realtime-knowledge".
-allowed-tools: Bash, Read, AskUserQuestion, mcp__claude_ai_Google_Calendar__list_calendars
+description: Conecta uma fonte de "conhecimento realtime" ao vbrain (hoje: Google Calendar e Gmail via MCP). Cria uma página fantasma na wiki/_realtime/ com kind=realtime que casa no FTS5 e dispara handler ao vivo no /vbrain-query-knowledge. Use quando o usuário pedir "conecta meu gcalendar", "conecta meu gmail", "adiciona meu calendário", "quero buscar agenda/email junto", ou "vbrain-add-realtime-knowledge".
+allowed-tools: Bash, Read, AskUserQuestion, mcp__claude_ai_Google_Calendar__list_calendars, mcp__claude_ai_Gmail__list_labels
 ---
 
 # vbrain-add-realtime-knowledge
@@ -14,7 +14,7 @@ ao vivo em vez de devolver o body.
 
 ## Inputs
 
-- **source** (opcional): qual fonte ativar. Hoje suportado: `gcalendar`.
+- **source** (opcional): qual fonte ativar. Hoje suportado: `gcalendar`, `gmail`.
   Se ausente, pergunte ao usuário via `AskUserQuestion`.
 
 ## Fontes suportadas
@@ -22,6 +22,7 @@ ao vivo em vez de devolver o body.
 | `source`    | Status      | Script determinístico                    |
 |---|---|---|
 | `gcalendar` | suportado   | `scripts/add_realtime/gcalendar.rb`      |
+| `gmail`     | suportado   | `scripts/add_realtime/gmail.rb`          |
 | `slack`     | futuro      | (não implementado)                       |
 | outro       | improvise   | pergunte ao usuário detalhes da conexão  |
 
@@ -33,7 +34,8 @@ Se o usuário não passou `source`, use `AskUserQuestion`:
 
 > "Qual fonte realtime você quer conectar ao vbrain?"
 > 1. Google Calendar (`gcalendar`)
-> 2. Outra (descreva)
+> 2. Gmail (`gmail`)
+> 3. Outra (descreva)
 
 Se a resposta for "outra" ou um valor não suportado, peça ao usuário pra
 descrever a fonte. Pergunte se ele quer que você crie uma fonte
@@ -109,25 +111,78 @@ BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Us
 
 Onde `<N>` é o número de calendários conectados.
 
+### 2bis. Fluxo `gmail`
+
+**2bis-a. Verificar autenticação do MCP.** Tente `mcp__claude_ai_Gmail__list_labels`.
+Possíveis retornos:
+
+- JSON com `labels: [...]` → MCP autenticado. Siga pra 2bis-b.
+- Resposta tipo "ask the user to run /mcp and select 'claude.ai Gmail' to
+  authenticate" → MCP **não autenticado**. Pare e instrua o usuário:
+  > "Pra conectar o Gmail, abre `/mcp` no Claude Code, seleciona
+  > **claude.ai Gmail** e autoriza no navegador. Quando voltar, me chama
+  > de novo com `/vbrain-add-realtime-knowledge gmail`."
+  Não tente bypassar.
+
+**2bis-b. Listar labels** via `mcp__claude_ai_Gmail__list_labels`.
+O retorno traz só **user labels** (`labelId` + `name`). System labels NÃO
+aparecem mas existem com IDs bem-conhecidos: `INBOX`, `IMPORTANT`, `STARRED`,
+`UNREAD`, `SENT`, `DRAFT`, `SPAM`, `TRASH`, `CHAT`.
+
+**2bis-c. Perguntar quais labels conectar.** Tente `AskUserQuestion` com
+`multiSelect: true` listando: as 3 system labels relevantes (`INBOX`,
+`IMPORTANT`, `STARRED`) + todos os user labels retornados. Label = `name`
+(ou ID para system), description = "system" ou "user".
+
+**Fallback se `AskUserQuestion` não estiver disponível**: conecte só
+`INBOX` + `IMPORTANT` por default e avise:
+> "Conectei INBOX + IMPORTANT. Pra refinar, edite
+> `~/vbrain/config/realtime/gmail.yml` (adicione objetos `{id, name}` à
+> chave `labels`) e rode `scripts/reindex.rb`, ou rode
+> `/vbrain-add-realtime-knowledge gmail` numa sessão interativa."
+
+**2bis-d. Montar JSON e rodar o script Ruby:**
+
+```bash
+BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/add_realtime/gmail.rb --labels-json '<JSON>'
+```
+
+Onde `<JSON>` é uma string JSON com a chave `labels`, cada item
+`{"id": "...", "name": "..."}`. Exemplo:
+
+```json
+{"labels":[
+  {"id":"INBOX","name":"Inbox"},
+  {"id":"IMPORTANT","name":"Important"},
+  {"id":"Label_5","name":"JCA"}
+]}
+```
+
+O script grava `~/vbrain/config/realtime/gmail.yml` + página fantasma em
+`~/vbrain/wiki/_realtime/gmail.md`.
+
+**2bis-e. Reindexar e commitar** (mesmos comandos da seção gcalendar, troque
+a mensagem do commit por `"realtime: conecta gmail (<N> labels)"`).
+
 ### 3. Reportar
 
 Mostre ao usuário:
-- Lista de calendários conectados (summary + id curto)
-- Path da config (`~/vbrain/config/realtime/gcalendar.yml`)
-- Path da página fantasma (`wiki/_realtime/gcalendar.md`)
-- Próximo passo: "agora pergunte algo como 'tenho reunião amanhã?' no
+- Lista de calendários/labels conectados
+- Path da config (`~/vbrain/config/realtime/<source>.yml`)
+- Path da página fantasma (`wiki/_realtime/<source>.md`)
+- Próximo passo: "agora pergunte algo como 'tenho reunião amanhã?' (gcalendar)
+  ou 'algum email do cliente X esta semana?' (gmail) no
   `/vbrain-query-knowledge` — vou puxar ao vivo."
 
 ## Regras
 
-- **Nunca** chame o MCP do Google Calendar **diretamente** nessa skill pra
-  buscar eventos. Aqui é só configuração (listar calendários disponíveis +
-  perguntar quais conectar). A busca de eventos é responsabilidade do
-  `/vbrain-query-knowledge`.
+- **Nunca** busque dados (eventos, emails) durante essa skill — ela é só
+  configuração. Listar calendários/labels é OK; buscar eventos/threads é
+  responsabilidade do `/vbrain-query-knowledge`.
 - **Nunca** escreva em `wiki/_realtime/` na mão pra fontes suportadas
-  (gcalendar/slack): sempre vai pelo script Ruby. Pra fontes "outra" sem
+  (gcalendar/gmail): sempre vai pelo script Ruby. Pra fontes "outra" sem
   script, escrever direto é OK mas avise o usuário que sem handler não vai
   resolver ao vivo.
-- Se o MCP `list_calendars` falhar (não conectado, sem permissão), pare e
-  oriente o usuário a conectar o Google Calendar à conta Claude antes de
-  re-rodar.
+- Se o MCP da fonte falhar (não conectado, sem permissão), pare e oriente
+  o usuário a abrir `/mcp` no Claude Code pra autorizar antes de re-rodar.
+  Não tente bypassar a autenticação.
