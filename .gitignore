@@ -1,0 +1,7 @@
+/db/*.sqlite3
+/db/*.sqlite3-*
+/raw/.tmp/
+/.bundle/
+/vendor/bundle/
+*.tmp.*
+.DS_Store
