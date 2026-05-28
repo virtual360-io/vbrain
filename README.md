@@ -2,41 +2,181 @@
 
 Base de conhecimento pessoal — inspirada em
 [akitaonrails/ai-memory](https://github.com/akitaonrails/ai-memory), reduzida
-a duas Claude Code skills + scripts Ruby + SQLite FTS5.
+a três Claude Code skills + scripts Ruby determinísticos + SQLite FTS5.
 
-## Como funciona
+A premissa: **wiki em markdown é a fonte da verdade; o SQLite é só índice
+derivado e descartável; o LLM só entra para o que exige julgamento (chunkar,
+sintetizar páginas)**. Todo o resto é Ruby testado.
 
-- **`~/vbrain/wiki/`** é a fonte da verdade: markdown com frontmatter YAML,
-  organizado em `concepts/`, `decisions/`, `gotchas/`, `notes/`, `_rules/`.
-- **`~/vbrain/raw/`** guarda os originais imutáveis ingeridos.
-- **`~/vbrain/db/vbrain.sqlite3`** é o índice — uma SQLite com `pages` +
-  virtual FTS5 `pages_fts` (mesmo padrão do ai-memory). Pode ser apagado a
-  qualquer momento e `scripts/reindex.rb` reconstrói lendo `wiki/`. Não há
-  `index.md`: o índice é puramente o SQLite.
+## Arquitetura
 
-A localização da pasta de dados pode ser sobrescrita com `VBRAIN_HOME`. O
-**código** (este repo) fica separado dos dados.
+### Separação código vs. dados
 
-## Skills
+Dois diretórios distintos:
 
-- `/add-knowledge <path>` — ingere um arquivo: copia para `raw/`, quebra em
-  chunks via subagente, gera páginas wiki, reindexa.
-- `/query-knowledge <pergunta>` — busca FTS5 e devolve trechos relevantes.
+| Diretório                   | O que é                                                  | Versionado                       |
+|---|---|---|
+| `~/Workspace/vbrain/`       | **Este repo** — código (Ruby), skills, testes            | git aqui                         |
+| `~/vbrain/` (`VBRAIN_HOME`) | **Sua base** — `raw/`, `wiki/`, `config/`, `db/vbrain.sqlite3` | git próprio, criado on demand |
+
+`VBRAIN_HOME` sobrescreve a localização da base (ex.: `~/Documents/vbrain`).
+A wiki vira um repo git separado no primeiro `add-knowledge` — privado, público
+ou só-local conforme escolha do usuário (ver `scripts/init_repo.rb`).
+
+### Layout da base (`~/vbrain/`)
+
+```
+~/vbrain/
+├── raw/                 # originais imutáveis (audit log)
+│   ├── 20260528T...-pg.md
+│   └── .tmp/            # arquivos intermediários do pipeline (extracted-N.txt, pages-N.json)
+├── wiki/                # markdown com frontmatter YAML — fonte da verdade
+│   ├── concepts/        # kind: concept
+│   ├── decisions/       # kind: decision
+│   ├── gotchas/         # kind: gotcha
+│   ├── notes/           # kind: note
+│   ├── _rules/          # kind: rule
+│   └── _realtime/       # kind: realtime — páginas fantasma que disparam handlers ao vivo
+├── config/
+│   └── realtime/        # config das fontes realtime (gcalendar.yml: lista de calendar IDs)
+└── db/
+    └── vbrain.sqlite3   # índice puro — `pages` + virtual `pages_fts` (FTS5)
+```
+
+Apagar `db/` e rodar `scripts/reindex.rb` reconstrói o índice inteiro a partir
+de `wiki/`. Não existe `wiki/index.md` — espelhamos o ai-memory, onde a única
+estrutura de índice é o SQLite derivado.
+
+### Skills (interface com o Claude Code)
+
+| Slash command                       | O que faz                                                                                          |
+|---|---|
+| `/vbrain-add-knowledge <path\|url>` | Ingere arquivo/URL → `raw/` → chunker LLM → wiki-writer LLM → `write_pages.rb` → reindex → commit  |
+| `/vbrain-query-knowledge <query>`   | Roda FTS5 via `query.rb`; páginas `kind: realtime` disparam handler MCP em vez de retornar snippet |
+| `/vbrain-add-realtime-knowledge`    | Conecta fonte realtime (hoje: Google Calendar via MCP) e cria página fantasma em `wiki/_realtime/` |
+
+As skills moram em `.claude/skills/vbrain-*/` neste repo. O `scripts/install.rb`
+copia tudo para `~/.claude/skills/` reescrevendo paths relativos por absolutos
+(apontando para este repo) e setando `BUNDLE_GEMFILE` — assim as skills rodam
+de qualquer CWD.
+
+### Pipeline de ingest (add-knowledge)
+
+```
+       ┌───────────────────────────────────────────────────────────────┐
+input ─┤ Claude orquestra; passos numerados são Ruby determinístico    │
+       └───────────────────────────────────────────────────────────────┘
+        │
+        ▼
+  ┌──────────────────────────┐
+  │ 0. init_repo.rb          │  só no 1º ingest — pergunta privado/público/local
+  └──────────────────────────┘
+        │
+        ▼
+  ┌──────────────────────────┐
+  │ 1. ingest_raw.rb <input> │  detecta source_type, copia p/ raw/, extrai texto
+  └──────────────────────────┘    em raw/.tmp/extracted-<raw_id>.txt
+        │
+        ▼ (LLM subagente)
+  ┌──────────────────────────┐
+  │ 2. chunker/<type>.md     │  prompts/chunker/{text,url,tweet}.md → JSON {chunks:[…]}
+  └──────────────────────────┘    2b. fallback se 0 chunks: follow links → Wayback → ask
+        │
+        ▼ (LLM subagente, paralelo)
+  ┌──────────────────────────┐
+  │ 3. wiki-writer.md        │  cada chunk → uma página com frontmatter YAML grounded
+  └──────────────────────────┘    agregado em raw/.tmp/pages-<raw_id>.json
+        │
+        ▼
+  ┌──────────────────────────┐
+  │ 4. write_pages.rb        │  única escrita em wiki/ é via esse script
+  └──────────────────────────┘
+        │
+        ▼
+  ┌──────────────────────────┐
+  │ 5. reindex.rb            │  reescreve pages do banco a partir de wiki/
+  └──────────────────────────┘    triggers AI/AD/AU mantêm pages_fts sincronizado
+        │
+        ▼
+  ┌──────────────────────────┐
+  │ 6. commit.rb             │  commit + push idempotente no repo da base
+  └──────────────────────────┘
+```
+
+### Fontes (`lib/vbrain/sources/`)
+
+`Sources::REGISTRY` é probada em ordem por `Sources.detect`:
+
+| Source              | Detecção                                    | Extração                                                                   |
+|---|---|---|
+| `Sources::Twitter`  | URL `twitter.com\|x.com/<user>/status/<id>` | `cdn.syndication.twimg.com` + Playwright (Chrome do sistema) p/ X Articles |
+| `Sources::Url`      | Outras URLs http(s)                         | Jina Reader (`r.jina.ai`) — markdown limpo                                 |
+| `Sources::Text`     | `.md`, `.txt`, sem extensão + UTF-8         | passthrough                                                                |
+
+Cada fonte tem chunker dedicado em
+`.claude/skills/vbrain-add-knowledge/prompts/chunker/<kind_key>.md` —
+não um chunker genérico (regra dura: cada formato precisa de pré-processador
+Ruby + chunker prompt próprio).
+
+Tipo desconhecido cai em `source_type='oneshot'`: o Claude usa `WebFetch` ou
+subagente extractor genérico, marca como oneshot no banco, e segue com
+`chunker/text.md`. Só vira fonte permanente se o usuário pedir explicitamente.
+
+### Schema do índice (`lib/vbrain/db.rb`)
+
+```sql
+raw_sources(id, path UNIQUE, original_filename, source_type, sha256 UNIQUE, ingested_at)
+pages(id, path UNIQUE, title, body, kind, tags, sha256, raw_id → raw_sources, created_at, updated_at)
+pages_fts(title, body, tags)              -- virtual FTS5, content='pages'
+  tokenize: unicode61 tokenchars '/_-'    -- preserva slashes, underscores, hífens
+```
+
+Triggers `pages_ai`/`pages_ad`/`pages_au` espelham toda escrita em `pages`
+para `pages_fts`. `kind` é checado por CHECK constraint
+(`concept|decision|gotcha|note|rule|realtime`); migração transparente para
+schemas antigos via `rebuild_pages_if_old_kind_check!`.
+
+`lib/vbrain/fts_query.rb` normaliza a query do usuário (escapa `:`, aspas,
+parênteses) antes de mandar pro FTS5.
+
+### Realtime (`wiki/_realtime/` + handlers MCP)
+
+Páginas com `kind: realtime` contêm só keywords sintéticas no body — o
+suficiente pra casar no FTS5 (`agenda`, `reunião`, `hoje`, `amanhã`…) — e
+metadados no frontmatter (`source: gcalendar`). A lista real de calendários
+fica em `~/vbrain/config/realtime/gcalendar.yml`, fora do índice.
+
+Quando `query-knowledge` encontra uma dessas, ele **não** mostra o snippet —
+dispara o handler MCP correspondente (hoje:
+`mcp__claude_ai_Google_Calendar__list_events`) com janela temporal derivada da
+query ("hoje", "essa semana", etc.) e formata o resultado ao vivo.
+
+## Diretórios deste repo
+
+```
+vbrain/
+├── lib/vbrain/          # núcleo determinístico (paths, db, page, slug, fts_query, git, sources/, realtime/)
+├── scripts/             # entrypoints chamados pelas skills (CLI Ruby, output JSON)
+├── .claude/skills/      # SKILL.md + prompts dos subagentes (chunker, wiki-writer)
+├── test/                # minitest 1:1 com lib/ e scripts/
+├── Gemfile              # sqlite3, playwright-ruby-client, minitest, rake
+└── Rakefile             # `rake test`
+```
+
+Todo arquivo em `lib/vbrain/` e `scripts/` tem teste correspondente em `test/`.
+Os testes isolam dados em tmpdir via `VBRAIN_HOME`.
 
 ## Setup
 
 ```bash
 bundle install
-bundle exec ruby scripts/install.rb            # instala skills em ~/.claude/skills/
+bundle exec ruby scripts/install.rb   # idempotente — rerode após git pull
 ```
 
-O install é **idempotente** — rode de novo após `git pull` para atualizar.
-Ele reescreve as SKILL.md substituindo paths relativos por absolutos (apontando
-para este repo) e seta `BUNDLE_GEMFILE`, então as skills funcionam de qualquer
-diretório.
-
-`VBRAIN_HOME` pode ser exportado no shell para mover a base para outro lugar
-(ex.: `~/Documents/vbrain`).
+O install reescreve as SKILL.md substituindo paths relativos por absolutos
+(apontando para este repo) e seta `BUNDLE_GEMFILE`, então as skills funcionam
+de qualquer diretório. `VBRAIN_HOME` pode ser exportado no shell para mover a
+base para outro lugar (ex.: `~/Documents/vbrain`).
 
 ## Testes
 
@@ -44,15 +184,12 @@ diretório.
 bundle exec rake test
 ```
 
-Todo arquivo determinístico (`lib/vbrain/*` e `scripts/*`) tem teste minitest
-correspondente em `test/`. Os testes isolam dados em tmpdir via `VBRAIN_HOME`.
-
 ## Verificação manual
 
 ```bash
 printf "# Postgres\n\nUse REPLICA IDENTITY FULL p/ logical replication.\n" > /tmp/pg.md
-# rode a skill /add-knowledge passando /tmp/pg.md
+# rode a skill /vbrain-add-knowledge passando /tmp/pg.md
 bundle exec ruby scripts/query.rb "replica identity" --format markdown
 bundle exec ruby scripts/query.rb "postgres:logical"   # ':' não quebra FTS5
-bundle exec ruby scripts/stats.rb                       # estatísticas do banco
+bundle exec ruby scripts/stats.rb                       # JSON com total + distribuição por kind
 ```
