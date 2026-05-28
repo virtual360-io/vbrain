@@ -39,6 +39,8 @@ ou só-local conforme escolha do usuário (ver `scripts/init_repo.rb`).
 │   └── _realtime/       # kind: realtime — páginas fantasma que disparam handlers ao vivo
 ├── config/
 │   └── realtime/        # config das fontes realtime (gcalendar.yml: lista de calendar IDs)
+├── routines/
+│   └── routines.yml     # lista de rotinas (slug + description + prompt + enabled)
 └── db/
     └── vbrain.sqlite3   # índice puro — `pages` + virtual `pages_fts` (FTS5)
 ```
@@ -54,6 +56,8 @@ estrutura de índice é o SQLite derivado.
 | `/vbrain-add-knowledge <path\|url>` | Ingere arquivo/URL → `raw/` → chunker LLM → wiki-writer LLM → `write_pages.rb` → reindex → commit  |
 | `/vbrain-query-knowledge <query>`   | Roda FTS5 via `query.rb`; páginas `kind: realtime` disparam handler MCP em vez de retornar snippet |
 | `/vbrain-add-realtime-knowledge`    | Conecta fonte realtime (hoje: Google Calendar e Gmail via MCP) e cria página fantasma em `wiki/_realtime/` |
+| `/vbrain-add-routine`               | Adiciona rotina (slug, descrição, cron, prompt) e bootstrap do watch loop                            |
+| `/vbrain-routine [slug\|status]`    | **Watch (default)**: claim de rotinas vencidas via `run_due_routines.rb`, dispatch paralelo, re-armar `/loop 1m` |
 
 As skills moram em `.claude/skills/vbrain-*/` neste repo. O `scripts/install.rb`
 copia tudo para `~/.claude/skills/` reescrevendo paths relativos por absolutos
@@ -156,6 +160,47 @@ dispara o handler MCP correspondente e formata o resultado ao vivo. Pra
 adicionar nova fonte realtime, replique o trio:
 `lib/vbrain/realtime/<source>.rb` (helper), `scripts/add_realtime/<source>.rb`
 (CLI), entrada no dispatcher do `vbrain-query-knowledge`.
+
+### Rotinas (`~/vbrain/routines/routines.yml`)
+
+Uma rotina é um **prompt nomeado com cron**. Cada entry tem `slug`,
+`description`, `schedule` (5-field cron), `next_run` (ISO8601 UTC,
+computado deterministicamente por [fugit](https://github.com/floraison/fugit)),
+`last_run`, `prompt`, e `enabled`. Exemplo:
+
+```yaml
+routines:
+  - slug: morning-brief
+    description: Resumo da manhã (inbox + agenda do dia)
+    schedule: "0 6 * * *"
+    next_run: "2026-05-29T09:00:00Z"
+    last_run: "2026-05-28T09:00:00Z"
+    prompt: |
+      Usa /vbrain-query-knowledge pra mostrar:
+      1. Emails INBOX recebidos hoje (top 5)
+      2. Reuniões/eventos do calendário hoje
+      Resuma em até 5 bullets.
+    enabled: true
+```
+
+**Modelo de execução** (watch como default):
+
+1. `/vbrain-add-routine` adiciona ao YAML com `next_run` inicial e
+   bootstrappa o watch loop chamando `/vbrain-routine`.
+2. `/vbrain-routine` (sem args) chama `scripts/run_due_routines.rb` que
+   atomicamente: identifica rotinas com `next_run <= now`, avança o
+   `next_run` (próximo tick do cron), retorna a lista pra skill executar.
+   Cada rotina vai pra um **sub-agente paralelo**. Em seguida re-arma
+   `/loop 1m /vbrain-routine`.
+3. Semântica é **at-most-once**: se o sub-agente falhar, aquele run é
+   perdido (não re-tentamos). Pra forçar execução manual, use
+   `/vbrain-routine <slug>` (não altera state).
+4. `/vbrain-routine status` lista cron + next_run + last_run.
+
+O cron é interpretado no **TZ local do sistema**, mas armazenado em UTC.
+
+Storage é **separado da wiki** — rotinas são comandos, não conhecimento,
+e não entram no FTS5.
 
 ## Diretórios deste repo
 
