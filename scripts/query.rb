@@ -26,7 +26,7 @@ end
 results = []
 VBrain::DB.open do |db|
   rows = db.execute(<<~SQL, [normalized, opts[:limit]])
-    SELECT p.path AS path, p.title AS title,
+    SELECT p.path AS path, p.title AS title, p.kind AS kind,
            snippet(pages_fts, 1, '**', '**', '…', 12) AS snip,
            rank
       FROM pages_fts
@@ -37,8 +37,9 @@ VBrain::DB.open do |db|
   SQL
   results = rows.map do |r|
     {
-      "path"  => r["path"],
-      "title" => r["title"],
+      "path"    => r["path"],
+      "title"   => r["title"],
+      "kind"    => r["kind"],
       "snippet" => r["snip"]
     }
   end
@@ -58,6 +59,7 @@ else
     puts "## #{i + 1}. #{r['title']}"
     puts
     puts "**Path:** `wiki/#{r['path']}`"
+    puts "**Kind:** `#{r['kind']}`" if r['kind']
     puts
     puts r["snippet"]
     puts

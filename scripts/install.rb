@@ -17,6 +17,8 @@ REPO_ROOT   = VBrain::Paths::PROJECT_ROOT
 SKILLS_SRC  = File.join(REPO_ROOT, ".claude", "skills")
 SKILLS_DEST = opts[:target]
 
+OBSOLETE_SKILLS = %w[add-knowledge query-knowledge].freeze
+
 abort("source skills dir not found: #{SKILLS_SRC}") unless Dir.exist?(SKILLS_SRC)
 
 def rewrite_skill_md(content, repo_root)
@@ -88,10 +90,20 @@ Dir.children(SKILLS_SRC).sort.each do |name|
   installed << install_skill(name, src, dest, REPO_ROOT, dry_run: opts[:dry_run])
 end
 
+removed = []
+OBSOLETE_SKILLS.each do |name|
+  path = File.join(SKILLS_DEST, name)
+  next unless Dir.exist?(path)
+
+  removed << "#{name}: rm -r (obsolete skill)"
+  FileUtils.rm_rf(path) unless opts[:dry_run]
+end
+
 puts "VBRAIN_ROOT: #{REPO_ROOT}"
 puts "target:     #{SKILLS_DEST}"
 puts "dry-run:    #{opts[:dry_run]}"
 puts
 installed.each { |lines| puts lines.join("\n") }
+removed.each { |line| puts line }
 puts
 puts opts[:dry_run] ? "(dry-run; nothing written)" : "Skills instaladas. Reabra o Claude Code para detectar."

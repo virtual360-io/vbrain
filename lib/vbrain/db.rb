@@ -22,7 +22,7 @@ module VBrain
         path        TEXT NOT NULL UNIQUE,
         title       TEXT NOT NULL,
         body        TEXT NOT NULL,
-        kind        TEXT NOT NULL CHECK(kind IN ('concept','decision','gotcha','note','rule')),
+        kind        TEXT NOT NULL CHECK(kind IN ('concept','decision','gotcha','note','rule','realtime')),
         tags        TEXT NOT NULL DEFAULT '',
         sha256      TEXT NOT NULL,
         raw_id      INTEGER REFERENCES raw_sources(id) ON DELETE SET NULL,
@@ -66,6 +66,26 @@ module VBrain
     end
 
     def self.migrate!(db)
+      db.execute_batch(SCHEMA_SQL)
+      rebuild_pages_if_old_kind_check!(db)
+    end
+
+    def self.rebuild_pages_if_old_kind_check!(db)
+      row = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='pages'").first
+      return unless row
+
+      sql = row.is_a?(Hash) ? row["sql"] : row[0]
+      return unless sql
+      return if sql.include?("'realtime'")
+      return unless sql.include?("CHECK(kind IN")
+
+      db.execute_batch(<<~SQL)
+        DROP TRIGGER IF EXISTS pages_ai;
+        DROP TRIGGER IF EXISTS pages_ad;
+        DROP TRIGGER IF EXISTS pages_au;
+        DROP TABLE IF EXISTS pages_fts;
+        DROP TABLE IF EXISTS pages;
+      SQL
       db.execute_batch(SCHEMA_SQL)
     end
   end

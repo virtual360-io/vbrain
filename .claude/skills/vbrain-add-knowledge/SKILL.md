@@ -1,10 +1,10 @@
 ---
-name: add-knowledge
+name: vbrain-add-knowledge
 description: Ingere um arquivo ou URL no vbrain — copia para raw/, quebra em chunks via subagente, gera páginas wiki grounded, reindexa SQLite FTS5. Use quando o usuário pedir "salva isso no vbrain", "adiciona à base", ou fornecer um arquivo de notas/markdown, uma URL (artigo, blog) ou um tweet/X article para arquivar.
 allowed-tools: Bash, Read, Write, Agent, AskUserQuestion, WebFetch
 ---
 
-# add-knowledge
+# vbrain-add-knowledge
 
 Pipeline determinístico (Ruby) + 2 subagentes LLM (chunker + wiki-writer) para
 transformar um arquivo bruto em páginas wiki indexadas no vbrain.

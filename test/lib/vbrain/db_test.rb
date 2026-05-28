@@ -67,4 +67,35 @@ class DBTest < Minitest::Test
       )
     end
   end
+
+  def test_check_constraint_accepts_realtime_kind
+    db = SQLite3::Database.new(":memory:")
+    VBrain::DB.migrate!(db)
+    db.execute(
+      "INSERT INTO pages (path, title, body, kind, sha256) VALUES (?, ?, ?, ?, ?)",
+      ["_realtime/gcalendar.md", "GCal", "body", "realtime", "sha"]
+    )
+  end
+
+  def test_migrate_rebuilds_pages_when_old_check_constraint_present
+    db = SQLite3::Database.new(":memory:")
+    db.execute_batch(<<~SQL)
+      CREATE TABLE pages (
+        id          INTEGER PRIMARY KEY,
+        path        TEXT NOT NULL UNIQUE,
+        title       TEXT NOT NULL,
+        body        TEXT NOT NULL,
+        kind        TEXT NOT NULL CHECK(kind IN ('concept','decision','gotcha','note','rule')),
+        tags        TEXT NOT NULL DEFAULT '',
+        sha256      TEXT NOT NULL,
+        raw_id      INTEGER,
+        created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      );
+    SQL
+
+    VBrain::DB.migrate!(db)
+    sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='pages'").first.first
+    assert_includes sql, "'realtime'"
+  end
 end

@@ -4,15 +4,16 @@ module VBrain
   module Paths
     PROJECT_ROOT = File.expand_path("../..", __dir__).freeze
 
-    CATEGORIES = %w[concepts decisions gotchas notes _rules].freeze
-    KINDS      = %w[concept decision gotcha note rule].freeze
+    CATEGORIES = %w[concepts decisions gotchas notes _rules _realtime].freeze
+    KINDS      = %w[concept decision gotcha note rule realtime].freeze
 
     CATEGORY_TO_KIND = {
       "concepts"  => "concept",
       "decisions" => "decision",
       "gotchas"   => "gotcha",
       "notes"     => "note",
-      "_rules"    => "rule"
+      "_rules"    => "rule",
+      "_realtime" => "realtime"
     }.freeze
 
     KIND_TO_CATEGORY = CATEGORY_TO_KIND.invert.freeze
