@@ -29,22 +29,22 @@ Parse o JSON de saída. Possíveis casos:
 - `{"source_type":"text"|"transcript"|...,"raw_id":N,"raw_path":...,"extracted_path":...}` → siga ao passo 2.
 - `{"duplicate":true,"raw_id":N,...}` → o sha256 desse arquivo já existe.
   Pergunte ao usuário se quer reprocessar (`--force`) ou abortar.
-- `{"source_type":"unknown",...}` → **não prossiga**. Use `AskUserQuestion`
-  oferecendo duas saídas:
-  1. **Criar fonte permanente** — gere os esqueletos abaixo, peça ao usuário
-     para rodar `bundle exec rake test`, então re-rode `ingest_raw.rb`:
-     - `lib/vbrain/sources/<nome>.rb` (extends `Base`, implementa `detect?`,
-       `kind_key`, `extract`)
-     - `test/lib/vbrain/sources/<nome>_test.rb` (detect ✓, detect ✗, extract)
-     - `test/fixtures/<nome>/sample.<ext>`
-     - `.claude/skills/add-knowledge/prompts/chunker/<nome>.md` (copie o
-       núcleo de `text.md` + ajuste a seção `## Heurísticas`)
-     - Registre o módulo em `lib/vbrain/sources.rb` (adicione ao `REGISTRY`).
-  2. **One-shot via LLM** — copie o arquivo para `raw/` manualmente, lance
-     um subagente extractor que produz texto plano em
-     `raw/.tmp/extracted-<timestamp>.txt`, e prossiga ao passo 2 usando
-     `prompts/chunker/text.md` como chunker. Marque depois o registro como
-     `source_type='oneshot'` em `raw_sources`.
+- `{"source_type":"unknown",...}` **OU** a extração determinística retornou
+  conteúdo trivial (< 100 palavras úteis, login wall, "Sign in", "Continue
+  with Apple", etc.):
+  - **DEFAULT: via LLM.** Não pergunte ao usuário se vale criar uma fonte
+    permanente. Use `WebFetch` (para URLs) ou um subagente extractor genérico
+    (para arquivos) para gerar texto plano em
+    `raw/.tmp/extracted-<raw_id>.txt`. Atualize a row em `raw_sources` para
+    `source_type='oneshot'`. Em seguida siga ao passo 2 usando
+    `prompts/chunker/text.md` como chunker.
+  - **Caso especial — links do X/Twitter** (tweets, X Articles, posts gated):
+    NÃO tente builds determinísticos adicionais. NÃO sugira `Sources::X`. X
+    bloqueia scraping consistentemente; o caminho que sempre funciona é
+    `WebFetch` lendo a URL como um humano leria, e usar o resultado como
+    input do chunker. O mesmo vale para qualquer site com auth/paywall.
+  - Só sugira "criar fonte permanente" se o usuário pedir explicitamente
+    ("quero ingerir muitos arquivos desse formato, vale fazer fonte?").
 
 ### 2. Chunkar (subagente)
 

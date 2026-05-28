@@ -19,63 +19,39 @@ class SourcesUrlTest < Minitest::Test
     assert_equal "url", VBrain::Sources::Url.kind_key
   end
 
-  def test_extract_from_html_renders_title_url_and_text
-    html = <<~HTML
-      <html>
-        <head>
-          <title>Hello World</title>
-          <meta property="og:title" content="Hello OG"/>
-          <meta property="og:description" content="A nice description"/>
-          <meta property="og:site_name" content="Example"/>
-        </head>
-        <body>
-          <article>
-            <h1>Hello</h1>
-            <p>First paragraph with content.</p>
-            <p>Second paragraph here.</p>
-          </article>
-          <script>console.log("strip me")</script>
-        </body>
-      </html>
-    HTML
-
-    md = VBrain::Sources::Url.extract_from_html(html, url: "https://example.com/post")
-    assert_includes md, "# Hello OG"
-    assert_includes md, "Source URL: https://example.com/post"
-    assert_includes md, "Site: Example"
-    assert_includes md, "## Resumo (Open Graph)"
-    assert_includes md, "A nice description"
-    assert_includes md, "## Conteúdo extraído"
-    assert_includes md, "First paragraph with content."
-    refute_includes md, "strip me", "script content must be removed"
-  end
-
-  def test_extract_from_html_falls_back_to_title_when_no_og
-    html = "<html><head><title>Plain</title></head><body><p>Body text.</p></body></html>"
-    md = VBrain::Sources::Url.extract_from_html(html, url: "https://x.test/")
-    assert_includes md, "# Plain"
-    assert_includes md, "Body text."
-    refute_includes md, "## Resumo"
-  end
-
-  def test_extract_from_html_marks_empty_when_no_text
-    html = "<html><head><title>Locked</title></head><body><script>x</script></body></html>"
-    md = VBrain::Sources::Url.extract_from_html(html, url: "https://x.test/")
-    assert_includes md, "(sem conteúdo textual extraível"
-  end
-
-  def test_copy_to_raw_writes_html_file_with_url_sha
+  def test_copy_to_raw_writes_markdown_with_url_sha
+    sample = "# Title\n\nSome article content.\n"
     with_isolated_data_home do
       VBrain::Paths.ensure_dirs!
-      VBrain::Sources::Url.stub(:fetch, ["<html><body>x</body></html>", "https://example.com/final", 200]) do
-        info = VBrain::Sources::Url.copy_to_raw("https://example.com/start", VBrain::Paths.raw_dir, "20260528T000000Z")
-        assert File.exist?(info["path"]), "raw HTML file must exist"
-        assert info["original_filename"].end_with?(".html")
-        assert_includes File.read(info["path"]), "<body>x</body>"
-        assert info["sha256"]
-        assert_equal "https://example.com/final", info["final_url"]
-        assert_equal 200, info["http_status"]
+      VBrain::Sources::Url.stub(:fetch_jina, sample) do
+        info = VBrain::Sources::Url.copy_to_raw("https://example.com/start",
+                                                VBrain::Paths.raw_dir, "20260528T000000Z")
+        assert File.exist?(info["path"]), "raw markdown file must exist"
+        assert info["original_filename"].end_with?(".md")
+        assert_equal sample, File.read(info["path"])
+        assert_equal Digest::SHA256.hexdigest("https://example.com/start\n#{sample}"),
+                     info["sha256"]
+        assert_equal sample, info["markdown"]
       end
+    end
+  end
+
+  def test_extract_uses_cached_markdown_when_provided
+    with_isolated_data_home do |dir|
+      out = File.join(dir, "extract.txt")
+      VBrain::Sources::Url.extract("https://example.com", out,
+                                   raw_info: { "markdown" => "# Cached\n" })
+      assert_equal "# Cached\n", File.read(out)
+    end
+  end
+
+  def test_extract_fetches_when_no_cache
+    with_isolated_data_home do |dir|
+      out = File.join(dir, "extract.txt")
+      VBrain::Sources::Url.stub(:fetch_jina, "# Fresh\n") do
+        VBrain::Sources::Url.extract("https://example.com", out)
+      end
+      assert_equal "# Fresh\n", File.read(out)
     end
   end
 
