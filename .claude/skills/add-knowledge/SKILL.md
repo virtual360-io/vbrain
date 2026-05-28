@@ -1,6 +1,6 @@
 ---
 name: add-knowledge
-description: Ingere um arquivo no vbrain — copia para raw/, quebra em chunks via subagente, gera páginas wiki grounded, reindexa SQLite FTS5. Use quando o usuário pedir "salva isso no vbrain", "adiciona à base", ou fornecer um arquivo de notas/transcript/doc/repo/planilha para arquivar.
+description: Ingere um arquivo ou URL no vbrain — copia para raw/, quebra em chunks via subagente, gera páginas wiki grounded, reindexa SQLite FTS5. Use quando o usuário pedir "salva isso no vbrain", "adiciona à base", ou fornecer um arquivo de notas/markdown, uma URL (artigo, blog) ou um tweet/X article para arquivar.
 allowed-tools: Bash, Read, Write, Agent, AskUserQuestion, WebFetch
 ---
 
@@ -11,10 +11,17 @@ transformar um arquivo bruto em páginas wiki indexadas no vbrain.
 
 ## Inputs
 
-- **path** (obrigatório): caminho absoluto do arquivo ou diretório a ingerir.
-- **--type** (opcional): força o `source_type` quando a detecção heurística
-  errar (`text` | `transcript` | `epub` | `repo` | `spreadsheet`). Só inclua
-  se o usuário pedir explicitamente.
+- **path** (obrigatório): caminho absoluto do arquivo OU URL (http/https).
+- **--type** (opcional): força o `source_type` (`text` | `url` | `tweet`)
+  quando a detecção heurística errar. Só inclua se o usuário pedir.
+
+## Fontes suportadas
+
+| `source_type` | Detecção | Como extrai |
+|---|---|---|
+| `tweet` | URL `twitter.com|x.com/<user>/status/<id>` | Syndication endpoint público (`cdn.syndication.twimg.com`) + Playwright + Chrome do sistema pra puxar body completo de X Articles linkados |
+| `url` | Outras URLs http(s) | Jina Reader (`r.jina.ai`) — retorna markdown limpo |
+| `text` | `.md`, `.txt`, sem extensão + UTF-8 | passthrough |
 
 ## Passos
 
@@ -65,7 +72,7 @@ bundle exec ruby scripts/ingest_raw.rb <path>
 
 Parse o JSON de saída. Possíveis casos:
 
-- `{"source_type":"text"|"transcript"|...,"raw_id":N,"raw_path":...,"extracted_path":...}` → siga ao passo 2.
+- `{"source_type":"text"|"url"|"tweet","raw_id":N,"raw_path":...,"extracted_path":...}` → siga ao passo 2.
 - `{"duplicate":true,"raw_id":N,...}` → o sha256 desse arquivo já existe.
   Pergunte ao usuário se quer reprocessar (`--force`) ou abortar.
 - `{"source_type":"unknown",...}` **OU** a extração determinística retornou
