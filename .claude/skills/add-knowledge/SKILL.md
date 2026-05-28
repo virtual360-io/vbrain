@@ -91,8 +91,10 @@ A saída JSON tem `{"written":["concepts/foo.md",...],"count":N}`.
 bundle exec ruby scripts/reindex.rb
 ```
 
-A saída tem `{"inserted":N,"updated":N,"deleted":N}`. Triggers FTS5 mantêm o
-índice de busca em sync automaticamente.
+A saída tem `{"inserted":N,"updated":N,"deleted":N}`. O índice é puramente
+o SQLite (`pages` + virtual `pages_fts`); triggers AI/AD/AU sincronizam o FTS5
+automaticamente. Não há `wiki/index.md` — espelhamos o ai-memory, onde a
+única estrutura de índice é o SQLite derivado.
 
 ### 6. Reportar ao usuário
 

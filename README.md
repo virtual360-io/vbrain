@@ -9,8 +9,10 @@ a duas Claude Code skills + scripts Ruby + SQLite FTS5.
 - **`~/vbrain/wiki/`** é a fonte da verdade: markdown com frontmatter YAML,
   organizado em `concepts/`, `decisions/`, `gotchas/`, `notes/`, `_rules/`.
 - **`~/vbrain/raw/`** guarda os originais imutáveis ingeridos.
-- **`~/vbrain/db/vbrain.sqlite3`** é o índice derivado (FTS5). Pode ser
-  apagado a qualquer momento — `scripts/reindex.rb` reconstrói lendo `wiki/`.
+- **`~/vbrain/db/vbrain.sqlite3`** é o índice — uma SQLite com `pages` +
+  virtual FTS5 `pages_fts` (mesmo padrão do ai-memory). Pode ser apagado a
+  qualquer momento e `scripts/reindex.rb` reconstrói lendo `wiki/`. Não há
+  `index.md`: o índice é puramente o SQLite.
 
 A localização da pasta de dados pode ser sobrescrita com `VBRAIN_HOME`. O
 **código** (este repo) fica separado dos dados.

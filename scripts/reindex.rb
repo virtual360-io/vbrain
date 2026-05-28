@@ -15,7 +15,6 @@ VBrain::DB.open do |db|
   files_on_disk = {}
   Dir.glob(File.join(VBrain::Paths.wiki_dir, "**", "*.md")).each do |abs|
     rel = abs.sub(VBrain::Paths.wiki_dir + "/", "")
-    next if rel == "index.md"
 
     parsed = VBrain::Page.parse(abs)
     fm = parsed.frontmatter
@@ -53,8 +52,5 @@ VBrain::DB.open do |db|
     deleted += 1
   end
 end
-
-build_index = File.expand_path("build_index_md.rb", __dir__)
-system(RbConfig.ruby, build_index) || abort("build_index_md failed")
 
 puts JSON.generate("inserted" => inserted, "updated" => updated, "deleted" => deleted)
