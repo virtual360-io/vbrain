@@ -58,6 +58,25 @@ class SourcesTwitterTest < Minitest::Test
     assert_includes md, "[x.com/i/article/2059…](http://x.com/i/article/2059581224960835584)"
   end
 
+  def test_extract_from_json_renders_embedded_article_preview
+    json = File.read(FIXTURE)
+    md = VBrain::Sources::Twitter.extract_from_json(json, url: TWEET_URL, id: TWEET_ID)
+    assert_includes md, "## Artigo embutido (preview do syndication)"
+    assert_includes md, "Using Autoresearch to improve harness skills"
+    assert_includes md, "self-improving agents are here"
+    assert_includes md, "body completo do artigo só é acessível com auth"
+  end
+
+  def test_extract_from_json_skips_article_section_when_absent
+    fake = {
+      "user" => { "name" => "X", "screen_name" => "x" },
+      "created_at" => "2026-01-01T00:00:00Z",
+      "text" => "hello"
+    }
+    md = VBrain::Sources::Twitter.extract_from_json(fake.to_json, url: "https://x.com/x/status/1", id: "1")
+    refute_includes md, "Artigo embutido"
+  end
+
   def test_extract_from_json_signals_empty_text_when_only_link
     fake = {
       "user" => { "name" => "X", "screen_name" => "x" },

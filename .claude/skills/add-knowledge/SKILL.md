@@ -1,7 +1,7 @@
 ---
 name: add-knowledge
 description: Ingere um arquivo no vbrain — copia para raw/, quebra em chunks via subagente, gera páginas wiki grounded, reindexa SQLite FTS5. Use quando o usuário pedir "salva isso no vbrain", "adiciona à base", ou fornecer um arquivo de notas/transcript/doc/repo/planilha para arquivar.
-allowed-tools: Bash, Read, Write, Agent, AskUserQuestion
+allowed-tools: Bash, Read, Write, Agent, AskUserQuestion, WebFetch
 ---
 
 # add-knowledge
@@ -103,8 +103,42 @@ Schema esperado:
 ]}
 ```
 
-Se `chunks` vier vazio, aborte e reporte: o documento não rendeu conhecimento
-durável; ofereça ao usuário rodar de novo com `--type` diferente ou descartar.
+Se `chunks` vier **vazio**, NÃO aborte ainda — siga o passo 2b.
+
+### 2b. Fallback de extração (quando chunker retorna 0 chunks)
+
+Significa que a extração determinística não rendeu conteúdo durável. Tente em
+ordem, **parando ao primeiro que produzir chunks > 0**:
+
+1. **Follow embedded links** (essencial para tweets que são só link de artigo):
+   Abra `extracted_path` e procure por seção `## Links citados` ou `## Referências`
+   com URLs, ou por uma URL dominante no body. Para cada URL encontrada (limite
+   3 mais relevantes — priorize artigos/blogs sobre `t.co`/encurtadores já
+   expandidos):
+   - Rode `WebFetch` na URL com o prompt:
+     > "Extraia o conteúdo principal do artigo em markdown limpo (título,
+     > autor se houver, corpo integral preservando estrutura). Se for login
+     > wall ou redirect pra Sign in, reporte explicitamente."
+   - Concatene as respostas com headings `## <URL>` em
+     `raw/.tmp/extracted-<raw_id>-followed.txt`.
+   - Re-rode o chunker subagente com `prompts/chunker/text.md` (não mais
+     `tweet.md` — agora é conteúdo de artigo) e o novo arquivo. Se gerar
+     chunks, siga.
+
+2. **Wayback Machine** (se WebFetch deu erro HTTP 4xx/5xx ou login wall):
+   Para cada URL que falhou, tente `https://web.archive.org/web/<URL>` via
+   `WebFetch`. Salve no mesmo `extracted-<raw_id>-followed.txt`. Re-rode o
+   chunker.
+
+3. **Pedir ao usuário** (último recurso): Use `AskUserQuestion` perguntando
+   se quer:
+   (a) Colar o conteúdo do artigo na próxima mensagem — você salva no
+       `extracted-<raw_id>-followed.txt` e re-roda chunker.
+   (b) Descartar a ingestão (passo 6 só commita o raw como audit log).
+   (c) Tentar URL diferente.
+
+4. **Honest abort**: se o usuário descartar, pule passos 3-5 mas siga o passo
+   6 (commit do raw como audit; reporte explicitamente "nenhuma página criada").
 
 ### 3. Escrever wiki (subagente)
 
@@ -172,3 +206,11 @@ Mostre:
   **não** prosseguir até o usuário consertar.
 - **FAITHFULNESS**: os subagentes têm regra dura de não inventar; se eles
   retornarem dados claramente fabricados, sinalize ao usuário.
+- **Tweet com link para artigo → seguir o link**: quando o tweet ingerido tem
+  pouco/nenhum texto próprio mas referencia uma URL externa (artigo, blog,
+  thread em outro site), o usuário quer **o conteúdo do artigo**, não só o
+  metadado do tweet. O passo 2b é obrigatório nesse caso — não termine "sem
+  páginas" se há link a seguir.
+- **Tentativas de fallback são ordenadas e exaustivas**: WebFetch direto →
+  Wayback Machine → pedir manual ao usuário. Nunca pular pra "abort" sem
+  exercitar a chain.

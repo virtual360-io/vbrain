@@ -17,14 +17,21 @@ fornecido. Você NÃO pode:
 - Confiar em conhecimento prévio sobre o autor.
 
 Se a seção `## Texto do tweet` for `(tweet sem texto — apenas mídia ou
-link)`, **retorne `{"chunks":[]}`**. O tweet não tem narrativa durável.
-Sinalize via `summary_hint` curto nada mais. Não fabrique conteúdo a partir
-de "Links citados" — o link aponta para um conteúdo externo que **não foi
-ingerido aqui**.
+link)`, examine se há seção `## Artigo embutido (preview do syndication)`:
 
-Da mesma forma, se o tweet é só uma frase trivial ("bom dia", "concordo!"),
-retorne `{"chunks":[]}`. Tweets que não compactam conhecimento durável não
-viram página.
+- **Se sim**: o tweet linkava um X Article cujo `preview_text` o syndication
+  entregou. Esse preview É conteúdo durável — gere **1 chunk** com:
+  - `raw_excerpt` = bloco de código com o `preview_text` literal + o título
+    do artigo
+  - `category` = `notes` (default) ou `concepts` se o preview claramente
+    define um padrão técnico
+  - `summary_hint` = **DEVE conter** "preview parcial — body completo
+    requer auth no X" e a autoria/título do article
+  - `tags` = `["tweet","article","x-article-preview"]` + tópicos do preview
+- **Se não**: o tweet realmente não tem narrativa. Retorne `{"chunks":[]}`.
+
+Da mesma forma, se o tweet é só uma frase trivial ("bom dia", "concordo!")
+e não tem article embutido, retorne `{"chunks":[]}`.
 
 ## Heurísticas
 

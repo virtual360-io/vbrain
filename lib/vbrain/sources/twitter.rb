@@ -99,6 +99,7 @@ module VBrain
         end
         favorites  = data["favorite_count"]
         lang       = data["lang"]
+        article    = data["article"]
 
         text_expanded = urls.reduce(text) do |acc, u|
           u["shortened"] && u["expanded"] ? acc.gsub(u["shortened"], u["expanded"]) : acc
@@ -141,6 +142,22 @@ module VBrain
             lines << "- #{m['type']}: #{m['url']}"
           end
           lines << ""
+        end
+
+        if article && (article["title"] || article["preview_text"])
+          lines << "## Artigo embutido (preview do syndication)"
+          lines << ""
+          lines << "- Artigo título: #{article['title'].to_s.strip}" if article["title"]
+          lines << "- Artigo ID: #{article['rest_id']}" if article["rest_id"]
+          lines << ""
+          lines << "**Nota**: o body completo do artigo só é acessível com auth no X. O texto abaixo é o `preview_text` (~200 chars) entregue pelo syndication público — use como excerpt literal, não infira o resto."
+          lines << ""
+          if article["preview_text"]
+            lines << "```"
+            lines << article["preview_text"].to_s
+            lines << "```"
+            lines << ""
+          end
         end
 
         lines.join("\n") + "\n"
