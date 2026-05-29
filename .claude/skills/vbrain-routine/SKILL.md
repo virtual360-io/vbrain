@@ -1,6 +1,6 @@
 ---
 name: vbrain-routine
-description: Watch loop das rotinas do vbrain. Verifica em ~/vbrain/routines/routines.yml quais rotinas têm next_run vencido, dispara sub-agente paralelo pra cada, e a próxima execução é calculada deterministicamente pelo cron (fugit). Se chamado sem args, esse é o comportamento padrão (watch). Use quando o usuário pedir "roda minhas rotinas", "vbrain-routine", "executa rotina morning-brief", "fica rodando em background", ou referenciar uma rotina pelo slug.
+description: Watch loop das rotinas do vbrain. Verifica em ~/vbrain/config/routines/routines.yml quais rotinas têm next_run vencido, dispara sub-agente paralelo pra cada, e a próxima execução é calculada deterministicamente pelo cron (fugit). Se chamado sem args, esse é o comportamento padrão (watch). Use quando o usuário pedir "roda minhas rotinas", "vbrain-routine", "executa rotina morning-brief", "fica rodando em background", ou referenciar uma rotina pelo slug.
 allowed-tools: Bash, Read, Agent, AskUserQuestion, Skill, CronList
 ---
 
@@ -30,7 +30,7 @@ BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Us
 ```
 
 Esse script é **determinístico** e atômico:
-- Lê `~/vbrain/routines/routines.yml`.
+- Lê `~/vbrain/config/routines/routines.yml`.
 - Identifica rotinas com `enabled: true`, `schedule != null`, e
   `next_run <= now`.
 - Para cada uma: marca `last_run = now`, avança `next_run` para o próximo

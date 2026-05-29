@@ -35,9 +35,9 @@ ou só-local conforme escolha do usuário (ver `scripts/init_repo.rb`).
 │   │                    #   frontmatter `kind:` (concept/decision/gotcha/note/rule) é só metadado
 │   └── _realtime/       # kind: realtime — páginas fantasma que disparam handlers ao vivo
 ├── config/
-│   └── realtime/        # config das fontes realtime (gcalendar.yml: lista de calendar IDs)
-├── routines/
-│   └── routines.yml     # lista de rotinas (slug + description + prompt + enabled)
+│   ├── realtime/        # config das fontes realtime (gcalendar.yml: lista de calendar IDs)
+│   └── routines/
+│       └── routines.yml # lista de rotinas (slug + description + prompt + enabled)
 └── db/
     └── vbrain.sqlite3   # índice puro — `pages` + virtual `pages_fts` (FTS5) + `links` (grafo)
 ```
@@ -160,7 +160,7 @@ adicionar nova fonte realtime, replique o trio:
 `lib/vbrain/realtime/<source>.rb` (helper), `scripts/add_realtime/<source>.rb`
 (CLI), entrada no dispatcher do `vbrain-query-knowledge`.
 
-### Rotinas (`~/vbrain/routines/routines.yml`)
+### Rotinas (`~/vbrain/config/routines/routines.yml`)
 
 Uma rotina é um **prompt nomeado com cron**. Cada entry tem `slug`,
 `description`, `schedule` (5-field cron), `next_run` (ISO8601 UTC,

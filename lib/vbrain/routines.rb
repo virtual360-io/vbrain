@@ -12,7 +12,7 @@ module VBrain
     CRON_RE = /\A\S+\s+\S+\s+\S+\s+\S+\s+\S+\z/
 
     def self.config_path
-      File.join(Paths.data_home, "routines", "routines.yml")
+      File.join(Paths.data_home, "config", "routines", "routines.yml")
     end
 
     def self.load_all

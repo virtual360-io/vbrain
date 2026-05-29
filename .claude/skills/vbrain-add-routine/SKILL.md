@@ -1,12 +1,12 @@
 ---
 name: vbrain-add-routine
-description: Adiciona uma rotina ao vbrain (~/vbrain/routines/routines.yml) com slug, descrição, cron schedule e prompt. Computa next_run inicial deterministicamente via fugit. Pergunta se quer testar agora via slug. NÃO bootstrappa nenhum loop nem cron — isso é responsabilidade do /vbrain-routine quando o usuário invocar. Use quando o usuário pedir "cria uma rotina", "adiciona rotina", "rotina que roda toda manhã às 6h", "rotina horária", ou "vbrain-add-routine".
+description: Adiciona uma rotina ao vbrain (~/vbrain/config/routines/routines.yml) com slug, descrição, cron schedule e prompt. Computa next_run inicial deterministicamente via fugit. Pergunta se quer testar agora via slug. NÃO bootstrappa nenhum loop nem cron — isso é responsabilidade do /vbrain-routine quando o usuário invocar. Use quando o usuário pedir "cria uma rotina", "adiciona rotina", "rotina que roda toda manhã às 6h", "rotina horária", ou "vbrain-add-routine".
 allowed-tools: Bash, Read, Write, AskUserQuestion, Agent
 ---
 
 # vbrain-add-routine
 
-Cria uma rotina no `~/vbrain/routines/routines.yml`. O script Ruby
+Cria uma rotina no `~/vbrain/config/routines/routines.yml`. O script Ruby
 computa `next_run` deterministicamente (fugit) a partir do cron + agora.
 Opcionalmente, pergunta se quer **testar agora** via sub-agente (manual
 trigger via slug, não altera state).
