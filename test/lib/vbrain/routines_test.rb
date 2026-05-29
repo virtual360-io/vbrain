@@ -21,6 +21,27 @@ class RoutinesTest < Minitest::Test
     end
   end
 
+  def test_seed_defaults_adds_dream_once_and_is_idempotent
+    with_isolated_data_home do |_|
+      r1 = VBrain::Routines.seed_defaults!(now: FIXED_NOW)
+      assert_includes r1["seeded"], "dream"
+
+      dream = VBrain::Routines.find("dream")
+      refute_nil dream
+      assert_equal "0 3 * * *", dream["schedule"]
+      assert_equal true, dream["enabled"]
+      refute_nil dream["next_run"]
+      assert_includes dream["prompt"], VBrain::Paths::PROJECT_ROOT
+      refute_includes dream["prompt"], "__VBRAIN_REPO__"
+
+      # Segunda chamada não duplica nem sobrescreve.
+      r2 = VBrain::Routines.seed_defaults!(now: FIXED_NOW)
+      assert_includes r2["skipped"], "dream"
+      assert_empty r2["seeded"]
+      assert_equal 1, VBrain::Routines.load_all.size
+    end
+  end
+
   def test_add_creates_yaml_and_returns_entry_with_next_run
     with_isolated_data_home do |_|
       entry = VBrain::Routines.add!(

@@ -11,6 +11,57 @@ module VBrain
 
     CRON_RE = /\A\S+\s+\S+\s+\S+\s+\S+\s+\S+\z/
 
+    # Rotinas que o vbrain semeia por padrão no setup (install.rb / seed). O
+    # prompt vem de config/routines/<prompt_file> no repo, com __VBRAIN_REPO__
+    # trocado pelo caminho absoluto deste repo (o sub-agente roda os scripts
+    # por caminho absoluto).
+    DEFAULTS = [
+      {
+        "slug"        => "dream",
+        "description" => "Auto-melhoria noturna: lê o query_log e reorganiza a wiki pra responder melhor.",
+        "schedule"    => "0 3 * * *",
+        "enabled"     => true,
+        "prompt_file" => "dream.prompt.md"
+      }
+    ].freeze
+
+    def self.prompt_dir
+      File.join(Paths::PROJECT_ROOT, "config", "routines")
+    end
+
+    def self.render_default_prompt(prompt_file)
+      raw = File.read(File.join(prompt_dir, prompt_file))
+      raw.gsub("__VBRAIN_REPO__", Paths::PROJECT_ROOT)
+    end
+
+    # Idempotente: adiciona cada default que ainda NÃO existe; nunca sobrescreve
+    # a escolha do usuário (enabled/disabled, last_run, edição de prompt).
+    def self.seed_defaults!(dry_run: false, now: Time.now)
+      seeded = []
+      skipped = []
+
+      DEFAULTS.each do |d|
+        if find(d["slug"])
+          skipped << d["slug"]
+          next
+        end
+
+        seeded << d["slug"]
+        next if dry_run
+
+        add!(
+          slug:        d["slug"],
+          description: d["description"],
+          schedule:    d["schedule"],
+          prompt:      render_default_prompt(d["prompt_file"]),
+          enabled:     d["enabled"],
+          now:         now
+        )
+      end
+
+      { "seeded" => seeded, "skipped" => skipped }
+    end
+
     def self.config_path
       File.join(Paths.data_home, "config", "routines", "routines.yml")
     end

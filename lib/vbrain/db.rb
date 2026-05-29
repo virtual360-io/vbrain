@@ -40,6 +40,16 @@ module VBrain
       CREATE INDEX IF NOT EXISTS links_from ON links(from_page_id);
       CREATE INDEX IF NOT EXISTS links_to   ON links(to_page_id);
 
+      CREATE TABLE IF NOT EXISTS query_log (
+        id            INTEGER PRIMARY KEY,
+        query         TEXT NOT NULL,
+        source_query  TEXT,
+        normalized    TEXT NOT NULL DEFAULT '',
+        results_count INTEGER NOT NULL DEFAULT 0,
+        created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      );
+      CREATE INDEX IF NOT EXISTS query_log_created ON query_log(created_at);
+
       CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
         title, body, tags,
         content='pages', content_rowid='id',

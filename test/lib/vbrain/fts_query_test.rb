@@ -42,6 +42,28 @@ class FtsQueryTest < Minitest::Test
     db.execute("SELECT title FROM pages_fts WHERE pages_fts MATCH ?", [normalized])
   end
 
+  def test_drops_stopwords_keeping_content_terms
+    # "quais empregos eu já tive" deve virar só os termos de conteúdo — as
+    # stopwords (quais/eu/já/tive) inflavam o OR e afogavam o sinal no BM25,
+    # que foi a causa raiz do bug de "não acha empregos".
+    assert_equal %("empregos"), VBrain::FtsQuery.normalize("quais empregos eu já tive")
+  end
+
+  def test_drops_stopwords_case_insensitive_and_unaccented
+    assert_equal %("carreira"), VBrain::FtsQuery.normalize("Quais foram Minhas carreira")
+    assert_equal %("carreira"), VBrain::FtsQuery.normalize("o que eu ja tive de carreira")
+  end
+
+  def test_keeps_multiple_content_terms
+    assert_equal %("cargo" OR "visagio" OR "consultor"),
+                 VBrain::FtsQuery.normalize("qual foi meu cargo na visagio como consultor")
+  end
+
+  def test_falls_back_to_original_when_all_stopwords
+    # Só stopwords: melhor buscar com elas do que devolver vazio (zero hits).
+    refute_empty VBrain::FtsQuery.normalize("quem é você")
+  end
+
   def test_actually_queries_fts_without_error
     require "sqlite3"
     require "vbrain/db"

@@ -153,6 +153,117 @@ class WritePagesCLITest < Minitest::Test
     end
   end
 
+  # PORQUÊ: o dream reorganiza a wiki com autonomia total (merge/delete). O
+  # delete tem que ir pelo MESMO caminho determinístico (nunca rm solto) e ser
+  # atômico — move pra trash via rename e descarta. Sem isso, a wiki podia
+  # ficar meio-apagada num crash, ou o dream burlaria o invariante de escrita.
+  def test_delete_removes_existing_page_atomically
+    Dir.mktmpdir do |dir|
+      raw_id = ingest_marker(dir, "del")
+      slug = "wpdel-#{Time.now.to_f.to_s.tr('.', '')}"
+      keep = "wpdelkeep-#{Time.now.to_f.to_s.tr('.', '')}"
+      # Segundo citador do mesmo raw pra o delete não orfanizar (guardrail).
+      write_pages(dir, raw_id, [
+        { "op" => "create", "kind" => "note", "title" => "WP Del",
+          "tags" => ["t"], "body_markdown" => "# WP Del\n\nx\n", "slug_hint" => slug },
+        { "op" => "create", "kind" => "note", "title" => "WP Del Keep",
+          "tags" => ["t"], "body_markdown" => "# Keep\n\ny\n", "slug_hint" => keep }
+      ])
+      abs = File.join(VBrain::Paths.wiki_dir, "#{slug}.md")
+      @paths_to_cleanup << File.join(VBrain::Paths.wiki_dir, "#{keep}.md")
+      assert File.exist?(abs)
+
+      result = write_pages(dir, raw_id, [{ "op" => "delete", "slug" => slug }])
+      assert_equal ["#{slug}.md"], result["deleted"]
+      assert_equal 1, result["count"]
+      refute File.exist?(abs), "página removida da wiki"
+      refute Dir.exist?(File.join(VBrain::Paths.tmp_dir, "wiki-stage-#{raw_id}")),
+        "temp inteira (stage + .trash) descartada no fim do commit"
+    end
+  end
+
+  def test_delete_unknown_slug_is_noop
+    Dir.mktmpdir do |dir|
+      raw_id = ingest_marker(dir, "delnoop")
+      result = write_pages(dir, raw_id, [{ "op" => "delete", "slug" => "nao-existe-#{Time.now.to_f.to_s.tr('.', '')}" }])
+      assert_empty result["deleted"], "delete idempotente: slug inexistente não falha"
+      assert_equal 0, result["count"]
+    end
+  end
+
+  def test_delete_skipped_when_slug_also_written_this_run
+    Dir.mktmpdir do |dir|
+      raw_id = ingest_marker(dir, "delconf")
+      slug = "wpdelconf-#{Time.now.to_f.to_s.tr('.', '')}"
+      # Contradição na mesma run: cria E manda apagar o mesmo slug. Create vence;
+      # o delete é ignorado (não apagamos o que acabamos de escrever).
+      result = write_pages(dir, raw_id, [
+        { "op" => "create", "kind" => "note", "title" => "Keep",
+          "tags" => ["t"], "body_markdown" => "x\n", "slug_hint" => slug },
+        { "op" => "delete", "slug" => slug }
+      ])
+      abs = File.join(VBrain::Paths.wiki_dir, "#{slug}.md")
+      @paths_to_cleanup << abs
+      assert_empty result["deleted"], "delete de slug encenado nesta run é ignorado"
+      assert File.exist?(abs), "página criada sobrevive"
+    end
+  end
+
+  # PORQUÊ (guardrail): a verificação é DETERMINÍSTICA (Regra 5) — antes de
+  # qualquer mv, write_pages compara os raws citados (source_raw) antes vs depois.
+  # Se um delete deixaria um raw órfão (nenhuma página o cita), aborta o commit:
+  # a wiki fica intacta e o resultado pede needs_review. Sem isso, o dream
+  # poderia apagar a única página que cita um raw e perder a proveniência.
+  def test_delete_that_would_orphan_a_raw_aborts_without_touching_wiki
+    Dir.mktmpdir do |dir|
+      raw_id = ingest_marker(dir, "orphan")
+      slug = "wporphan-#{Time.now.to_f.to_s.tr('.', '')}"
+      write_pages(dir, raw_id, [
+        { "op" => "create", "kind" => "note", "title" => "Only citer",
+          "tags" => ["t"], "body_markdown" => "x\n", "slug_hint" => slug }
+      ])
+      abs = File.join(VBrain::Paths.wiki_dir, "#{slug}.md")
+      @paths_to_cleanup << abs
+      raw_rel = VBrain::Page.parse(abs).frontmatter["source_raw"]
+
+      # Apagar a única página que cita esse raw → órfão → aborta.
+      json_path = File.join(dir, "del.json")
+      File.write(json_path, JSON.generate("pages" => [{ "op" => "delete", "slug" => slug }]))
+      stdout, _, status = Open3.capture3(
+        "bundle", "exec", "ruby", WRITE, "--raw-id", raw_id.to_s, "--pages-json", json_path,
+        chdir: PROJECT_ROOT
+      )
+      refute status.success?, "deve falhar alto quando órfanaria um raw"
+      result = JSON.parse(stdout)
+      assert_equal false, result["committed"]
+      assert_equal true, result["needs_review"]
+      assert_includes result["orphaned_raws"], raw_rel
+      assert File.exist?(abs), "wiki intacta: a página NÃO foi apagada"
+    end
+  end
+
+  def test_delete_commits_when_raw_still_cited_by_another_page
+    Dir.mktmpdir do |dir|
+      raw_id = ingest_marker(dir, "shared")
+      s1 = "wpshared1-#{Time.now.to_f.to_s.tr('.', '')}"
+      s2 = "wpshared2-#{Time.now.to_f.to_s.tr('.', '')}"
+      # Duas páginas citam o MESMO raw (mesmo raw_id nos dois creates).
+      write_pages(dir, raw_id, [{ "op" => "create", "kind" => "note", "title" => "P1",
+                                  "tags" => ["t"], "body_markdown" => "x\n", "slug_hint" => s1 }])
+      write_pages(dir, raw_id, [{ "op" => "create", "kind" => "note", "title" => "P2",
+                                  "tags" => ["t"], "body_markdown" => "y\n", "slug_hint" => s2 }])
+      abs1 = File.join(VBrain::Paths.wiki_dir, "#{s1}.md")
+      abs2 = File.join(VBrain::Paths.wiki_dir, "#{s2}.md")
+      @paths_to_cleanup << abs2
+
+      # Apagar P1 é seguro: P2 ainda cita o raw.
+      result = write_pages(dir, raw_id, [{ "op" => "delete", "slug" => s1 }])
+      assert_equal ["#{s1}.md"], result["deleted"]
+      refute File.exist?(abs1), "P1 apagada"
+      assert File.exist?(abs2), "P2 sobrevive citando o raw"
+    end
+  end
+
   private
 
   def ingest_marker(dir, label)

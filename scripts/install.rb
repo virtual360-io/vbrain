@@ -5,11 +5,12 @@ require "fileutils"
 require "optparse"
 require "vbrain"
 
-opts = { target: File.expand_path("~/.claude/skills"), dry_run: false }
+opts = { target: File.expand_path("~/.claude/skills"), dry_run: false, seed: true }
 parser = OptionParser.new do |o|
-  o.banner = "Usage: install.rb [--target DIR] [--dry-run]"
+  o.banner = "Usage: install.rb [--target DIR] [--dry-run] [--no-seed]"
   o.on("--target DIR") { |v| opts[:target] = File.expand_path(v) }
   o.on("--dry-run")    { opts[:dry_run] = true }
+  o.on("--no-seed")    { opts[:seed] = false }
 end
 parser.parse!(ARGV)
 
@@ -105,5 +106,12 @@ puts "dry-run:    #{opts[:dry_run]}"
 puts
 installed.each { |lines| puts lines.join("\n") }
 removed.each { |line| puts line }
+
+if opts[:seed]
+  seed = VBrain::Routines.seed_defaults!(dry_run: opts[:dry_run])
+  puts
+  puts "rotinas-padrão: seeded=#{seed['seeded'].join(',')} skipped=#{seed['skipped'].join(',')}"
+end
+
 puts
 puts opts[:dry_run] ? "(dry-run; nothing written)" : "Skills instaladas. Reabra o Claude Code para detectar."

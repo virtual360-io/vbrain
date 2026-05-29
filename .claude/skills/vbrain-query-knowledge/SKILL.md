@@ -18,20 +18,52 @@ correspondente (resolve ao vivo).
 
 ## Passos
 
+### 0. Expansão da query (ponte NL → vocabulário) — **só quando a query é linguagem natural**
+
+O FTS5 é lexical: a pergunta `"quais empregos eu já tive"` não casa nada
+porque a palavra "emprego" não está no corpus (as páginas dizem "Visagio",
+"consultor", "carreira"). O Ruby já remove stopwords, mas não inventa
+sinônimos — esse é o seu julgamento.
+
+Pule este passo se a `query` já é keyword(s) (1–3 termos técnicos, um nome
+próprio, um slug). Faça-o quando for pergunta em linguagem natural.
+
+1. Puxe o vocabulário real de tags da base:
+
+```bash
+BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/tags.rb --limit 60 --format json
+```
+
+2. Reescreva a pergunta num punhado de **termos de conteúdo** (4–8), enviesado
+   pelo vocabulário acima. Inclua sinônimos/forma flexionada e, quando houver,
+   a(s) tag(s) que casam a intenção. Ex.: `"quais empregos eu já tive"` →
+   `carreira trabalho consultor estagiário empresa cargo`. Não inclua
+   stopwords nem a própria palavra da pergunta se ela não existe no corpus.
+   Não invente nomes próprios que você não viu.
+3. Use esses termos como `<query>` nos passos 1–2, e **sempre** passe a
+   pergunta original em `--source-query` (o `query_log` guarda as duas — é o
+   que a rotina `dream` analisa pra reorganizar a wiki).
+
 ### 1. FTS5
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/query.rb "<query>" --limit <N> --format json
+BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/query.rb "<query>" --limit <N> --source-query "<pergunta original>" --format json
 ```
 
 Parseie `results`. Cada item tem `path`, `title`, `kind`, `snippet`.
 Se `results` vier vazio, tente o passo 2 (prefix). Caso contrário pule pro 3.
 
+(Se você não expandiu — query já era keyword — passe a própria query em
+`--source-query` também, ou omita: o log usa a `query` nesse caso.)
+
 ### 2. Fallback com prefix matching
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/query.rb "<query>" --limit <N> --prefix --format json
+BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/query.rb "<query>" --limit <N> --prefix --no-log --format json
 ```
+
+(`--no-log` aqui: o passo 1 já registrou a intenção; o retry com prefix não
+deve duplicar a linha no `query_log`.)
 
 Se ainda vazio: "Nenhum resultado encontrado para `<query>` na base vbrain.
 Tente termos mais gerais ou verifique se algo já foi ingerido com
