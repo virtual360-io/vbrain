@@ -26,7 +26,7 @@ class CommitCLITest < Minitest::Test
       ENV["VBRAIN_HOME"] = home
       VBrain::Paths.ensure_dirs!
       VBrain::Git.init!(home)
-      File.write(File.join(home, "wiki", "notes", "x.md"), "# x\n")
+      File.write(File.join(home, "wiki", "x.md"), "# x\n")
 
       stdout, _stderr, status = Open3.capture3(
         "bundle", "exec", "ruby", SCRIPT, "--message", "add: x", "--no-push",

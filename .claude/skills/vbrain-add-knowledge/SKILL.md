@@ -103,7 +103,7 @@ Schema esperado:
 ```json
 {"chunks":[
   {"suggested_title":"...",
-   "category":"concepts|decisions|gotchas|notes|_rules",
+   "kind":"concept|decision|gotcha|note|rule",
    "tags":["..."],
    "raw_excerpt":"trecho literal",
    "summary_hint":"1 frase neutra"}
@@ -151,7 +151,9 @@ ordem, **parando ao primeiro que produzir chunks > 0**:
 
 Para cada chunk, lance um subagente `general-purpose` com
 `prompts/wiki-writer.md` como system prompt e o chunk individual como user
-message. Você pode rodar em paralelo (múltiplos Agent na mesma mensagem).
+message. Você pode rodar em paralelo (múltiplos Agent na mesma mensagem). O
+wiki-writer organiza a página livremente e escreve `[[wikilinks]]` para
+conectar a outras páginas — quem vira aresta é o `reindex.rb` (passo 5).
 
 Agregue as saídas em um único JSON `{"pages":[...]}` e escreva em
 `raw/.tmp/pages-<raw_id>.json`. Essa é a única escrita direta do Claude no
@@ -163,7 +165,8 @@ filesystem nesta skill — todo o resto vai via scripts Ruby.
 bundle exec ruby scripts/write_pages.rb --raw-id <N> --pages-json raw/.tmp/pages-<N>.json
 ```
 
-A saída JSON tem `{"written":["concepts/foo.md",...],"count":N}`.
+A saída JSON tem `{"written":["foo.md",...],"count":N}`. Páginas de
+conhecimento moram na **raiz** de `wiki/` (espaço plano, sem pastas por tipo).
 
 ### 5. Reindexar
 
@@ -171,10 +174,13 @@ A saída JSON tem `{"written":["concepts/foo.md",...],"count":N}`.
 bundle exec ruby scripts/reindex.rb
 ```
 
-A saída tem `{"inserted":N,"updated":N,"deleted":N}`. O índice é puramente
-o SQLite (`pages` + virtual `pages_fts`); triggers AI/AD/AU sincronizam o FTS5
-automaticamente. Não há `wiki/index.md` — espelhamos o ai-memory, onde a
-única estrutura de índice é o SQLite derivado.
+A saída tem `{"inserted":N,"updated":N,"deleted":N,"links":N}`. O índice é
+puramente o SQLite (`pages` + virtual `pages_fts` + tabela `links`); triggers
+AI/AD/AU sincronizam o FTS5 automaticamente. Além de reindexar o FTS, o
+`reindex.rb` **parseia os `[[wikilinks]]` do body e reconstrói o grafo** na
+tabela `links` (alvo inexistente → aresta com `to_page_id` NULL, resolvida num
+reindex futuro). Não há `wiki/index.md` — espelhamos o ai-memory: a estrutura
+é o grafo de links + o SQLite derivado, não uma árvore de pastas.
 
 ### 6. Commit + push
 

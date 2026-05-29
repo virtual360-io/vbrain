@@ -10,6 +10,7 @@ class DBTest < Minitest::Test
     tables = db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").flat_map(&:values).uniq
     assert_includes tables, "pages"
     assert_includes tables, "raw_sources"
+    assert_includes tables, "links"
 
     fts = db.execute("SELECT name FROM sqlite_master WHERE name='pages_fts'").first
     assert fts, "pages_fts virtual table should exist"
@@ -75,6 +76,39 @@ class DBTest < Minitest::Test
       "INSERT INTO pages (path, title, body, kind, sha256) VALUES (?, ?, ?, ?, ?)",
       ["_realtime/gcalendar.md", "GCal", "body", "realtime", "sha"]
     )
+  end
+
+  def test_link_cascades_when_source_page_deleted
+    db = SQLite3::Database.new(":memory:")
+    db.results_as_hash = true
+    VBrain::DB.migrate!(db)
+
+    db.execute("INSERT INTO pages (path, title, body, kind, sha256) VALUES ('a.md','A','b','note','s1')")
+    from_id = db.last_insert_row_id
+    db.execute("INSERT INTO pages (path, title, body, kind, sha256) VALUES ('b.md','B','b','note','s2')")
+    to_id = db.last_insert_row_id
+    db.execute("INSERT INTO links (from_page_id, target_slug, target_title, to_page_id) VALUES (?, 'b', 'B', ?)", [from_id, to_id])
+
+    db.execute("DELETE FROM pages WHERE id = ?", [from_id])
+    assert_equal 0, db.execute("SELECT COUNT(*) AS n FROM links").first["n"],
+      "edge deve sumir junto com a página de origem (CASCADE)"
+  end
+
+  def test_link_target_nulled_when_target_page_deleted
+    db = SQLite3::Database.new(":memory:")
+    db.results_as_hash = true
+    VBrain::DB.migrate!(db)
+
+    db.execute("INSERT INTO pages (path, title, body, kind, sha256) VALUES ('a.md','A','b','note','s1')")
+    from_id = db.last_insert_row_id
+    db.execute("INSERT INTO pages (path, title, body, kind, sha256) VALUES ('b.md','B','b','note','s2')")
+    to_id = db.last_insert_row_id
+    db.execute("INSERT INTO links (from_page_id, target_slug, target_title, to_page_id) VALUES (?, 'b', 'B', ?)", [from_id, to_id])
+
+    db.execute("DELETE FROM pages WHERE id = ?", [to_id])
+    row = db.execute("SELECT from_page_id, to_page_id FROM links").first
+    assert_equal from_id, row["from_page_id"], "aresta permanece (forward link vira não-resolvido)"
+    assert_nil row["to_page_id"], "alvo deletado vira NULL (SET NULL)"
   end
 
   def test_migrate_rebuilds_pages_when_old_check_constraint_present

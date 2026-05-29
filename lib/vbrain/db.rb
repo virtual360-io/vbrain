@@ -30,6 +30,16 @@ module VBrain
         updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
       );
 
+      CREATE TABLE IF NOT EXISTS links (
+        id           INTEGER PRIMARY KEY,
+        from_page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+        target_slug  TEXT NOT NULL,
+        target_title TEXT NOT NULL,
+        to_page_id   INTEGER REFERENCES pages(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS links_from ON links(from_page_id);
+      CREATE INDEX IF NOT EXISTS links_to   ON links(to_page_id);
+
       CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
         title, body, tags,
         content='pages', content_rowid='id',

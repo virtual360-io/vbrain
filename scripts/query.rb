@@ -24,9 +24,10 @@ if normalized.empty?
 end
 
 results = []
+related = []
 VBrain::DB.open do |db|
   rows = db.execute(<<~SQL, [normalized, opts[:limit]])
-    SELECT p.path AS path, p.title AS title, p.kind AS kind,
+    SELECT p.id AS id, p.path AS path, p.title AS title, p.kind AS kind,
            snippet(pages_fts, 1, '**', '**', '…', 12) AS snip,
            rank
       FROM pages_fts
@@ -43,11 +44,35 @@ VBrain::DB.open do |db|
       "snippet" => r["snip"]
     }
   end
+
+  # Expansão por vizinhos no grafo (1 hop): páginas que os hits linkam
+  # (outlinks) + páginas que linkam pros hits (backlinks). Sem RRF/reweighting
+  # — o vbrain fica raso aqui de propósito (não temos embeddings). Só anexa
+  # vizinhos como "Relacionadas", deduplicando o que já está nos resultados.
+  hit_ids = rows.map { |r| r["id"] }
+  unless hit_ids.empty?
+    ph = (["?"] * hit_ids.size).join(",")
+    neighbors = db.execute(<<~SQL, hit_ids + hit_ids)
+      SELECT p.id AS id, p.path AS path, p.title AS title, p.kind AS kind
+        FROM links l JOIN pages p ON p.id = l.to_page_id
+       WHERE l.from_page_id IN (#{ph}) AND l.to_page_id IS NOT NULL
+      UNION
+      SELECT p.id AS id, p.path AS path, p.title AS title, p.kind AS kind
+        FROM links l JOIN pages p ON p.id = l.from_page_id
+       WHERE l.to_page_id IN (#{ph})
+    SQL
+    related = neighbors
+              .reject { |n| hit_ids.include?(n["id"]) }
+              .uniq { |n| n["id"] }
+              .first(opts[:limit])
+              .map { |n| { "path" => n["path"], "title" => n["title"], "kind" => n["kind"] } }
+  end
 end
 
 case opts[:format]
 when "json"
-  puts JSON.generate("query" => query, "normalized" => normalized, "results" => results)
+  puts JSON.generate("query" => query, "normalized" => normalized,
+                     "results" => results, "related" => related)
 else
   if results.empty?
     puts "Nenhum resultado para `#{query}`."
@@ -62,6 +87,14 @@ else
     puts "**Kind:** `#{r['kind']}`" if r['kind']
     puts
     puts r["snippet"]
+    puts
+  end
+  unless related.empty?
+    puts "## Relacionadas (grafo)"
+    puts
+    related.each do |r|
+      puts "- **#{r['title']}** — `wiki/#{r['path']}`"
+    end
     puts
   end
 end

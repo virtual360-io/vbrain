@@ -10,6 +10,7 @@ VBrain::Paths.ensure_dirs!
 inserted = 0
 updated  = 0
 deleted  = 0
+links    = 0
 
 VBrain::DB.open do |db|
   files_on_disk = {}
@@ -21,8 +22,9 @@ VBrain::DB.open do |db|
     title = fm["title"] || File.basename(rel, ".md")
     kind  = fm["kind"]
     unless VBrain::Paths::KINDS.include?(kind)
-      first_seg = rel.split("/").first
-      kind = VBrain::Paths::CATEGORY_TO_KIND[first_seg] || "note"
+      # Sem pasta-tipo no layout plano: confia no frontmatter. Páginas sob
+      # _realtime são realtime por construção; o resto default note.
+      kind = rel.split("/").first == VBrain::Paths::REALTIME_DIR ? "realtime" : "note"
     end
     tags = Array(fm["tags"]).join(",")
     body = parsed.body
@@ -51,6 +53,29 @@ VBrain::DB.open do |db|
     db.execute("DELETE FROM pages WHERE id = ?", [r["id"]])
     deleted += 1
   end
+
+  # Rebuild determinístico do grafo: parseia [[wikilinks]] do body de cada
+  # página e resolve o alvo (slug) contra as páginas existentes. Link p/
+  # página inexistente vira aresta com to_page_id NULL (forward link).
+  # Rebuild completo todo reindex — barato e idempotente (Regra 5).
+  pages = db.execute("SELECT id, path, body FROM pages")
+  slug_to_id = pages.each_with_object({}) do |r, h|
+    h[File.basename(r["path"], ".md")] = r["id"]
+  end
+
+  db.execute("DELETE FROM links")
+  pages.each do |r|
+    VBrain::Links.extract(r["body"]).each do |target|
+      tslug = VBrain::Links.target_slug(target)
+      next if tslug.nil?
+
+      db.execute(
+        "INSERT INTO links (from_page_id, target_slug, target_title, to_page_id) VALUES (?, ?, ?, ?)",
+        [r["id"], tslug, target, slug_to_id[tslug]]
+      )
+      links += 1
+    end
+  end
 end
 
-puts JSON.generate("inserted" => inserted, "updated" => updated, "deleted" => deleted)
+puts JSON.generate("inserted" => inserted, "updated" => updated, "deleted" => deleted, "links" => links)

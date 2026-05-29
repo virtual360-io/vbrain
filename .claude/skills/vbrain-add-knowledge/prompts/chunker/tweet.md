@@ -23,7 +23,7 @@ link)`, examine se há seção `## Artigo embutido (preview do syndication)`:
   entregou. Esse preview É conteúdo durável — gere **1 chunk** com:
   - `raw_excerpt` = bloco de código com o `preview_text` literal + o título
     do artigo
-  - `category` = `notes` (default) ou `concepts` se o preview claramente
+  - `kind` = `note` (default) ou `concept` se o preview claramente
     define um padrão técnico
   - `summary_hint` = **DEVE conter** "preview parcial — body completo
     requer auth no X" e a autoria/título do article
@@ -36,9 +36,9 @@ e não tem article embutido, retorne `{"chunks":[]}`.
 ## Heurísticas
 
 - Tweet típico com tese ou observação substantiva (> 30 palavras): **1
-  chunk único**. Categoria geralmente `notes`; use `concepts` se descreve
-  um padrão técnico; `_rules` se enuncia uma regra ("sempre faça X");
-  `gotchas` se descreve uma armadilha.
+  chunk único**. `kind` geralmente `note`; use `concept` se descreve
+  um padrão técnico; `rule` se enuncia uma regra ("sempre faça X");
+  `gotcha` se descreve uma armadilha.
 - Tweet com código + comentário: 1 chunk. Mantenha o code block inteiro no
   `raw_excerpt`.
 - Thread já não cabe aqui — `Sources::Twitter` MVP só ingere 1 tweet.
@@ -55,7 +55,7 @@ markdown fences, sem prosa, sem `<think>`:
 ```json
 {"chunks":[
   {"suggested_title":"<título curto ≤80 chars>",
-   "category":"concepts|decisions|gotchas|notes|_rules",
+   "kind":"concept|decision|gotcha|note|rule",
    "tags":["tweet","tag-a"],
    "raw_excerpt":"<substring literal do markdown>",
    "summary_hint":"tweet de @handle sobre <X>"}

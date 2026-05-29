@@ -41,16 +41,16 @@ Retorne zero chunks — não invente o que "o artigo provavelmente diz".
 - **Lista de pontos (top-10, dicas)**: cada item substantivo pode virar
   chunk separado se autocontido; itens triviais agrupar.
 - **Tweet/post curto** (caiu aqui em vez de Sources::Twitter): 1 único
-  chunk; categoria `notes`.
+  chunk; `kind` `note`.
 - **Thread / discussão**: 1 chunk por ideia coesa, não por post.
 
-## Categorias
+## kind (metadado livre, não determina pasta — a wiki é plana)
 
-- `concepts` — explicação técnica evergreen, padrão, definição.
-- `decisions` — escolha explícita ("preferimos X a Y porque…").
-- `gotchas` — armadilha, failure mode, surpresa.
-- `_rules` — regra durável ("sempre…", "nunca…").
-- `notes` — default quando nada mais cabe.
+- `concept` — explicação técnica evergreen, padrão, definição.
+- `decision` — escolha explícita ("preferimos X a Y porque…").
+- `gotcha` — armadilha, failure mode, surpresa.
+- `rule` — regra durável ("sempre…", "nunca…").
+- `note` — default quando nada mais cabe.
 
 ## Tags
 
@@ -72,7 +72,7 @@ markdown fences, sem prosa, sem `<think>`:
 ```json
 {"chunks":[
   {"suggested_title":"<título curto ≤80 chars>",
-   "category":"concepts|decisions|gotchas|notes|_rules",
+   "kind":"concept|decision|gotcha|note|rule",
    "tags":["tag-a","tag-b"],
    "raw_excerpt":"<substring literal do markdown>",
    "summary_hint":"<1 frase neutra com autoria/contexto>"}

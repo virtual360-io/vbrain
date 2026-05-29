@@ -29,15 +29,24 @@ class PathsTest < Minitest::Test
     end
   end
 
-  def test_ensure_dirs_creates_structure
+  def test_ensure_dirs_creates_flat_structure
     with_isolated_data_home do |dir|
       VBrain::Paths.ensure_dirs!
       assert Dir.exist?(File.join(dir, "raw"))
       assert Dir.exist?(File.join(dir, "wiki"))
       assert Dir.exist?(File.join(dir, "db"))
       assert Dir.exist?(File.join(dir, "raw", ".tmp"))
-      VBrain::Paths::CATEGORIES.each do |c|
-        assert Dir.exist?(File.join(dir, "wiki", c)), "category #{c} missing"
+      assert Dir.exist?(File.join(dir, "wiki", VBrain::Paths::REALTIME_DIR)),
+        "subdir _realtime preservado"
+    end
+  end
+
+  def test_ensure_dirs_does_not_create_type_folders
+    with_isolated_data_home do |dir|
+      VBrain::Paths.ensure_dirs!
+      %w[concepts decisions gotchas notes _rules].each do |old|
+        refute Dir.exist?(File.join(dir, "wiki", old)),
+          "pasta de tipo #{old} não deve mais ser criada (layout plano)"
       end
     end
   end
@@ -47,13 +56,9 @@ class PathsTest < Minitest::Test
     assert File.exist?(File.join(VBrain::Paths::PROJECT_ROOT, "Gemfile"))
   end
 
-  def test_categories_and_kinds_map
-    assert_equal VBrain::Paths::CATEGORIES.size, VBrain::Paths::KINDS.size
-    VBrain::Paths::CATEGORIES.each do |c|
-      assert VBrain::Paths::CATEGORY_TO_KIND.key?(c)
-    end
-    VBrain::Paths::KINDS.each do |k|
-      assert VBrain::Paths::KIND_TO_CATEGORY.key?(k)
+  def test_kinds_include_all_supported_metadata
+    %w[concept decision gotcha note rule realtime].each do |k|
+      assert_includes VBrain::Paths::KINDS, k
     end
   end
 end

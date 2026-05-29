@@ -24,7 +24,10 @@ pages = data.is_a?(Array) ? data : data["pages"]
 abort("pages_json must be array or {pages:[...]}") unless pages.is_a?(Array)
 
 written = []
-existing_slugs = Hash.new { |h, k| h[k] = Dir.glob(File.join(k, "*.md")).map { |p| File.basename(p, ".md") } }
+# Espaço plano: páginas de conhecimento vão na raiz de wiki/. Unicidade de
+# slug é contra os *.md do top-level (não recursivo — _realtime fica de fora).
+wiki_dir = VBrain::Paths.wiki_dir
+existing_slugs = Dir.glob(File.join(wiki_dir, "*.md")).map { |p| File.basename(p, ".md") }
 
 VBrain::DB.open do |db|
   raw = db.execute("SELECT path FROM raw_sources WHERE id = ?", [opts[:raw_id]]).first
@@ -33,22 +36,19 @@ VBrain::DB.open do |db|
   raw_rel  = raw_path.sub(VBrain::Paths.data_home + "/", "")
 
   pages.each do |p|
-    category = p.fetch("category")
-    abort("invalid category: #{category}") unless VBrain::Paths::CATEGORIES.include?(category)
-    kind = VBrain::Paths::CATEGORY_TO_KIND.fetch(category)
     title = p.fetch("title")
     body  = p.fetch("body_markdown")
-    tags  = (p["tags"] || []).join(",")
+    # kind é metadado livre da LLM; valida contra KINDS, default "note".
+    kind  = VBrain::Paths::KINDS.include?(p["kind"]) ? p["kind"] : "note"
 
-    dir = File.join(VBrain::Paths.wiki_dir, category)
     base_slug = VBrain::Slug.from(p["slug_hint"] || title)
     slug = base_slug
     n = 2
-    while existing_slugs[dir].include?(slug)
+    while existing_slugs.include?(slug)
       slug = "#{base_slug}-#{n}"
       n += 1
     end
-    existing_slugs[dir] << slug
+    existing_slugs << slug
 
     fm = {
       "title" => title,
@@ -56,8 +56,8 @@ VBrain::DB.open do |db|
       "tags"  => (p["tags"] || []),
       "source_raw" => raw_rel
     }
-    full_path = VBrain::Page.write(dir: dir, slug: slug, frontmatter: fm, body: body)
-    rel = full_path.sub(VBrain::Paths.wiki_dir + "/", "")
+    full_path = VBrain::Page.write(dir: wiki_dir, slug: slug, frontmatter: fm, body: body)
+    rel = full_path.sub(wiki_dir + "/", "")
     written << rel
   end
 end

@@ -31,23 +31,22 @@ ou só-local conforme escolha do usuário (ver `scripts/init_repo.rb`).
 │   ├── 20260528T...-pg.md
 │   └── .tmp/            # arquivos intermediários do pipeline (extracted-N.txt, pages-N.json)
 ├── wiki/                # markdown com frontmatter YAML — fonte da verdade
-│   ├── concepts/        # kind: concept
-│   ├── decisions/       # kind: decision
-│   ├── gotchas/         # kind: gotcha
-│   ├── notes/           # kind: note
-│   ├── _rules/          # kind: rule
+│   ├── <slug>.md        # páginas de conhecimento, espaço plano; conectam-se por [[wikilinks]]
+│   │                    #   frontmatter `kind:` (concept/decision/gotcha/note/rule) é só metadado
 │   └── _realtime/       # kind: realtime — páginas fantasma que disparam handlers ao vivo
 ├── config/
 │   └── realtime/        # config das fontes realtime (gcalendar.yml: lista de calendar IDs)
 ├── routines/
 │   └── routines.yml     # lista de rotinas (slug + description + prompt + enabled)
 └── db/
-    └── vbrain.sqlite3   # índice puro — `pages` + virtual `pages_fts` (FTS5)
+    └── vbrain.sqlite3   # índice puro — `pages` + virtual `pages_fts` (FTS5) + `links` (grafo)
 ```
 
 Apagar `db/` e rodar `scripts/reindex.rb` reconstrói o índice inteiro a partir
-de `wiki/`. Não existe `wiki/index.md` — espelhamos o ai-memory, onde a única
-estrutura de índice é o SQLite derivado.
+de `wiki/` — incluindo o grafo: o reindex parseia os `[[wikilinks]]` do corpo
+das páginas e remonta a tabela `links`. Não existe `wiki/index.md` nem pastas
+por tipo — espelhamos o ai-memory: a estrutura é o grafo de links + o SQLite
+derivado, e a LLM organiza as páginas livremente.
 
 ### Skills (interface com o Claude Code)
 

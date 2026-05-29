@@ -27,12 +27,12 @@ Se o documento não rende nada durável, retorne `{"chunks":[]}`.
   `### Subtítulo` geralmente delimita um chunk.
 - Mantenha listas relacionadas juntas; não fragmente.
 - Mantenha bloco de código com sua explicação imediatamente adjacente.
-- Categoria:
-  - `concepts` — explicações técnicas evergreen ("X é Y porque Z").
-  - `decisions` — escolhas explícitas ("vamos usar X em vez de Y porque…").
-  - `gotchas` — armadilhas / failure modes / surpresas.
-  - `_rules` — regras duráveis ("sempre X", "nunca Y").
-  - `notes` — default quando nada mais cabe.
+- `kind` (metadado livre, não determina pasta — a wiki é plana):
+  - `concept` — explicações técnicas evergreen ("X é Y porque Z").
+  - `decision` — escolhas explícitas ("vamos usar X em vez de Y porque…").
+  - `gotcha` — armadilhas / failure modes / surpresas.
+  - `rule` — regras duráveis ("sempre X", "nunca Y").
+  - `note` — default quando nada mais cabe.
 - `tags`: 0–5 kebab-case curtos extraídos do conteúdo (e.g., `postgres`,
   `replication`, `index-rebuild`).
 
@@ -44,7 +44,7 @@ markdown fences, sem prosa, sem `<think>`:
 ```json
 {"chunks":[
   {"suggested_title":"<título curto ≤80 chars>",
-   "category":"concepts|decisions|gotchas|notes|_rules",
+   "kind":"concept|decision|gotcha|note|rule",
    "tags":["tag-a","tag-b"],
    "raw_excerpt":"<substring literal do raw>",
    "summary_hint":"<1 frase neutra descrevendo o chunk, sem opinião>"}

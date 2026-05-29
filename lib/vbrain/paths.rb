@@ -4,19 +4,13 @@ module VBrain
   module Paths
     PROJECT_ROOT = File.expand_path("../..", __dir__).freeze
 
-    CATEGORIES = %w[concepts decisions gotchas notes _rules _realtime].freeze
-    KINDS      = %w[concept decision gotcha note rule realtime].freeze
+    # Páginas de conhecimento vivem na raiz de wiki/ (espaço plano, estilo
+    # ai-memory). `_realtime` é o único subdir especial — páginas fantasma com
+    # handler MCP, escritas por outra skill, não pelo pipeline de ingest.
+    REALTIME_DIR = "_realtime".freeze
 
-    CATEGORY_TO_KIND = {
-      "concepts"  => "concept",
-      "decisions" => "decision",
-      "gotchas"   => "gotcha",
-      "notes"     => "note",
-      "_rules"    => "rule",
-      "_realtime" => "realtime"
-    }.freeze
-
-    KIND_TO_CATEGORY = CATEGORY_TO_KIND.invert.freeze
+    # kind é metadado livre no frontmatter; não determina mais a pasta.
+    KINDS = %w[concept decision gotcha note rule realtime].freeze
 
     def self.data_home
       env = ENV["VBRAIN_HOME"]
@@ -33,7 +27,7 @@ module VBrain
 
     def self.ensure_dirs!
       [raw_dir, wiki_dir, db_dir, tmp_dir].each { |d| FileUtils.mkdir_p(d) }
-      CATEGORIES.each { |c| FileUtils.mkdir_p(File.join(wiki_dir, c)) }
+      FileUtils.mkdir_p(File.join(wiki_dir, REALTIME_DIR))
     end
   end
 end
