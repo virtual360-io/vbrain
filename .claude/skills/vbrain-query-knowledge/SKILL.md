@@ -31,8 +31,10 @@ próprio, um slug). Faça-o quando for pergunta em linguagem natural.
 1. Puxe o vocabulário real de tags da base:
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/tags.rb --limit 60 --format json
+BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/tags.rb --limit 60
 ```
+
+(`tags.rb` já devolve JSON no stdout — não tem `--format`.)
 
 2. Reescreva a pergunta num punhado de **termos de conteúdo** (4–8), enviesado
    pelo vocabulário acima. Inclua sinônimos/forma flexionada e, quando houver,
