@@ -147,25 +147,50 @@ ordem, **parando ao primeiro que produzir chunks > 0**:
 4. **Honest abort**: se o usuário descartar, pule passos 3-5 mas siga o passo
    6 (commit do raw como audit; reporte explicitamente "nenhuma página criada").
 
-### 3. Escrever wiki (subagente)
+### 3. Escrever wiki (subagente, **estritamente um chunk por vez**)
 
-Para cada chunk, lance um subagente `general-purpose` com
-`prompts/wiki-writer.md` como system prompt e o chunk individual como user
-message. Você pode rodar em paralelo (múltiplos Agent na mesma mensagem). O
-wiki-writer organiza a página livremente e escreve `[[wikilinks]]` para
-conectar a outras páginas — quem vira aresta é o `reindex.rb` (passo 5).
+Processe os chunks **um de cada vez, em sequência — NUNCA em paralelo**. Cada
+chunk percorre o ciclo completo **writer → persistir → reindexar** antes de o
+próximo começar. É isso que faz o writer seguinte enxergar (e mesclar com) as
+páginas que os anteriores criaram: ele navega o índice **já atualizado**.
 
-Agregue as saídas em um único JSON `{"pages":[...]}` e escreva em
-`raw/.tmp/pages-<raw_id>.json`. Essa é a única escrita direta do Claude no
-filesystem nesta skill — todo o resto vai via scripts Ruby.
+> **Regra dura:** nunca lance dois writers na mesma mensagem. Um writer, um
+> `write_pages`, um `reindex`, e só então o próximo chunk. Paralelizar quebra a
+> navegação do grafo e pode fazer dois chunks atropelarem a mesma página.
 
-### 4. Persistir as páginas
+Para **cada chunk**, na ordem, faça o ciclo:
+
+1. **Writer** — lance UM subagente `general-purpose` (com Bash + Read) usando
+   `prompts/wiki-writer.md` como system prompt. No user message passe: o chunk
+   (JSON do chunker), o caminho absoluto da wiki (`<data_home>/wiki`), o
+   `source_raw`, e o comando de navegação
+   `bundle exec ruby scripts/query.rb "<termos>" --format json --limit 8`.
+   O writer devolve UM JSON: `op` (`create`|`update`), `slug` (quando `update`),
+   `title`, `tags`, `kind`, `body_markdown` (corpo **final completo**).
+2. **Persistir** — escreva esse único page-object em
+   `raw/.tmp/page-<raw_id>.json` (`{"pages":[<o objeto>]}`) e rode o passo 4.
+3. **Reindexar** — rode o passo 4b (linkify) e o passo 5 (reindex) **agora**,
+   pra que o próximo writer veja esta página no índice.
+
+Só depois de reindexar, parta pro próximo chunk. Não acumule páginas pra um
+`write_pages` em lote — o ciclo é por chunk.
+
+### 4. Persistir a página (staging + publicação atômica)
 
 ```bash
-bundle exec ruby scripts/write_pages.rb --raw-id <N> --pages-json raw/.tmp/pages-<N>.json
+bundle exec ruby scripts/write_pages.rb --raw-id <N> --pages-json raw/.tmp/page-<N>.json
 ```
 
-A saída JSON tem `{"written":["foo.md",...],"count":N}`. Páginas de
+O script encena a página (corpo inteiro) em `raw/.tmp/wiki-stage-<N>/` e só então
+a move pra `wiki/` via rename — a wiki nunca fica num estado meio-escrito.
+
+- `op: "create"` → arquivo novo (slug derivado do título; sufixo `-2` só em
+  colisão real com outro assunto).
+- `op: "update"` → sobrescreve o corpo inteiro da página existente (`slug`) e
+  mescla o frontmatter (union de `tags`; `source_raw` acumula o raw novo). Se o
+  `slug` não existir, cai pra `create` (defesa anti-alucinação).
+
+A saída JSON tem `{"written":[...],"updated":[...],"count":N}`. Páginas de
 conhecimento moram na **raiz** de `wiki/` (espaço plano, sem pastas por tipo).
 
 ### 4b. Linkificar (determinístico) + resolver não-resolvidos (LLM)
@@ -235,7 +260,7 @@ o erro e siga.
 
 Mostre:
 - Tipo detectado (`source_type`)
-- Lista de paths gerados em `wiki/`
+- Páginas **criadas** (`written`) e **atualizadas** (`updated`) em `wiki/`
 - Estatísticas do banco: `bundle exec ruby scripts/stats.rb` (retorna JSON com
   total de páginas, distribuição por kind e 5 mais recentes)
 - Status do commit/push (sha + remote URL quando aplicável)
