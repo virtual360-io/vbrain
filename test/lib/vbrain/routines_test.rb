@@ -182,6 +182,27 @@ class RoutinesTest < Minitest::Test
     end
   end
 
+  def test_claim_due_returns_previous_last_run_in_due_entry
+    with_isolated_data_home do |_|
+      VBrain::Routines.add!(slug: "h", description: "", prompt: "p",
+                            schedule: "0 * * * *", now: FIXED_NOW)
+
+      # First claim: no prior last_run.
+      first_tick = FIXED_NOW + 3600
+      first = VBrain::Routines.claim_due!(now: first_tick)
+      assert_equal 1, first.size
+      assert_nil first.first["last_run"],
+                 "due entry should expose the previous last_run (nil before any run)"
+
+      # Second claim: prior last_run is the first tick.
+      second_tick = first_tick + 3600
+      second = VBrain::Routines.claim_due!(now: second_tick)
+      assert_equal 1, second.size
+      assert_equal first_tick.iso8601, second.first["last_run"],
+                   "due entry should expose the previous last_run, not the just-claimed one"
+    end
+  end
+
   def test_claim_due_is_idempotent_when_called_twice_in_same_tick
     with_isolated_data_home do |_|
       VBrain::Routines.add!(slug: "h", description: "", prompt: "p",

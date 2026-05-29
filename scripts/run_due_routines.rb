@@ -36,6 +36,7 @@ puts JSON.generate(
       "description" => r["description"],
       "schedule"    => r["schedule"],
       "prompt"      => r["prompt"],
+      "last_run"    => r["last_run"],
       "claimed_at"  => r["claimed_at"]
     }
   end
