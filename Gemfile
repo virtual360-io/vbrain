@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-ruby "~> 3.3"
+ruby "~> 4.0"
 
 gem "sqlite3", "~> 2.1"
 gem "playwright-ruby-client", "~> 1.60"
