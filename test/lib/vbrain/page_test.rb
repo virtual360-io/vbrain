@@ -2,6 +2,27 @@ require "test_helper"
 require "vbrain/page"
 
 class PageTest < Minitest::Test
+  def test_rewrite_body_preserves_frontmatter_verbatim
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "p.md")
+      File.write(path, "---\ntitle: Foo\nkind: note\ntags:\n  - a\n---\nlink [[Alvo]] aqui\n")
+
+      changed = VBrain::Page.rewrite_body!(path) { |b| b.gsub("[[Alvo]]", "[Alvo](alvo.md)") }
+      assert changed
+      content = File.read(path)
+      assert_includes content, "---\ntitle: Foo\nkind: note\ntags:\n  - a\n---\n", "frontmatter verbatim"
+      assert_includes content, "link [Alvo](alvo.md) aqui"
+    end
+  end
+
+  def test_rewrite_body_returns_false_when_unchanged
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "p.md")
+      File.write(path, "---\ntitle: Foo\n---\nsem mudança\n")
+      refute VBrain::Page.rewrite_body!(path) { |b| b }
+    end
+  end
+
   def test_parse_string_with_frontmatter
     content = <<~MD
       ---

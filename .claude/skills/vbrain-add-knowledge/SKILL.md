@@ -168,6 +168,35 @@ bundle exec ruby scripts/write_pages.rb --raw-id <N> --pages-json raw/.tmp/pages
 A saída JSON tem `{"written":["foo.md",...],"count":N}`. Páginas de
 conhecimento moram na **raiz** de `wiki/` (espaço plano, sem pastas por tipo).
 
+### 4b. Linkificar (determinístico) + resolver não-resolvidos (LLM)
+
+```bash
+bundle exec ruby scripts/linkify.rb
+```
+
+Converte os `[[wikilinks]]` resolvíveis por slug exato em links markdown
+`[Título](slug.md)` — **navegáveis no GitHub e no Obsidian** (o GitHub não
+renderiza `[[ ]]` em arquivos de repo). Determinístico, idempotente, preserva
+o frontmatter verbatim. Saída: `{"changed":N,"scanned":N}`.
+
+Depois do `reindex.rb` (passo 5), os links que sobraram **não-resolvidos**
+(slug do título não bate com nenhuma página) ficam na tabela `links` com
+`to_page_id NULL`. Para fortalecer o grafo, uma **camada de julgamento (LLM)**
+decide a qual página existente cada um se refere:
+
+1. Liste os não-resolvidos e o índice de páginas:
+   `SELECT DISTINCT target_title FROM links WHERE to_page_id IS NULL` +
+   `SELECT path, title FROM pages`.
+2. Lance um subagente que, para cada `target_title`, escolhe o `slug` da página
+   existente que ele referencia (ou `null` se nenhuma servir — **não inventar**).
+   Saída: JSON `{"Título": "slug" | null}`.
+3. Aplique determinísticamente e reindexe:
+   ```bash
+   bundle exec ruby scripts/resolve_links.rb --map raw/.tmp/linkmap.json
+   bundle exec ruby scripts/reindex.rb
+   ```
+   `resolve_links.rb` descarta slugs que não existem (defesa anti-alucinação).
+
 ### 5. Reindexar
 
 ```bash

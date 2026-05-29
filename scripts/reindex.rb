@@ -65,13 +65,10 @@ VBrain::DB.open do |db|
 
   db.execute("DELETE FROM links")
   pages.each do |r|
-    VBrain::Links.extract(r["body"]).each do |target|
-      tslug = VBrain::Links.target_slug(target)
-      next if tslug.nil?
-
+    VBrain::Links.extract(r["body"]).each do |lnk|
       db.execute(
         "INSERT INTO links (from_page_id, target_slug, target_title, to_page_id) VALUES (?, ?, ?, ?)",
-        [r["id"], tslug, target, slug_to_id[tslug]]
+        [r["id"], lnk.slug, lnk.title, slug_to_id[lnk.slug]]
       )
       links += 1
     end

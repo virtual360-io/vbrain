@@ -41,6 +41,24 @@ module VBrain
       full
     end
 
+    # Reescreve só o CORPO de uma página, preservando o frontmatter verbatim
+    # (sem reserializar YAML — zero churn de formatação/ordem de chaves).
+    # Passa o body atual ao bloco; grava de volta atomicamente só se mudou.
+    # Retorna true se reescreveu, false se o bloco devolveu o body inalterado.
+    def self.rewrite_body!(path)
+      content = File.read(path)
+      m = content.match(FRONTMATTER_RE)
+      body = m ? m[2] : content
+      new_body = yield(body)
+      return false if new_body == body
+
+      new_content = m ? "---\n#{m[1]}\n---\n#{new_body}" : new_body
+      tmp = "#{path}.tmp.#{Process.pid}.#{rand(1 << 32)}"
+      File.write(tmp, new_content)
+      File.rename(tmp, path)
+      true
+    end
+
     def self.render(frontmatter, body)
       "#{YAML.dump(stringify_keys(frontmatter))}---\n#{body}"
     end
