@@ -1,7 +1,7 @@
 ---
 name: vbrain-query-knowledge
-description: Consulta a base vbrain (SQLite FTS5) e devolve trechos relevantes em markdown. Páginas com kind=realtime disparam handlers ao vivo (Google Calendar e Gmail via MCP) em vez de retornar o body. Use quando o usuário perguntar algo que pode estar arquivado ("o que eu sei sobre X", "procura no vbrain por Y"), ou quando outro agente precisar de contexto persistido para uma tarefa.
-allowed-tools: Bash, Read, mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread
+description: Consulta a base vbrain (SQLite FTS5) e devolve trechos relevantes em markdown. Páginas com kind=realtime disparam handlers ao vivo (Google Calendar, Gmail e Slack via MCP) em vez de retornar o body. Use quando o usuário perguntar algo que pode estar arquivado ("o que eu sei sobre X", "procura no vbrain por Y"), ou quando outro agente precisar de contexto persistido para uma tarefa.
+allowed-tools: Bash, Read, mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_thread
 ---
 
 # vbrain-query-knowledge
@@ -81,6 +81,7 @@ página em `~/vbrain/wiki/<path>` pra descobrir `source` e parâmetros.
 |---|---|
 | `gcalendar` | `mcp__claude_ai_Google_Calendar__list_events` (ver 3a)       |
 | `gmail`     | `mcp__claude_ai_Gmail__search_threads` (ver 3b)              |
+| `slack`     | `mcp__claude_ai_Slack__slack_search_public_and_private` (3c) |
 | outro       | reporte "fonte realtime `X` não tem handler implementado"    |
 
 **3a. Handler `gcalendar`:**
@@ -171,6 +172,54 @@ Se o usuário pedir o corpo completo de uma thread específica
 ("abre essa", "mostra o último email completo"), chame
 `mcp__claude_ai_Gmail__get_thread` com o `threadId` e
 `messageFormat: FULL_CONTENT`.
+
+**3c. Handler `slack`:**
+
+Leia o frontmatter da página, pegue a lista `channels` (cada um com `id`,
+`name`). Monte o `query` do `slack_search_public_and_private` em **Slack
+search syntax**. Atenção: o search do Slack **não tem operador `OR`** (espaço
+= AND) — por isso o filtro multi-canal NÃO vira uma query só.
+
+1. **Conteúdo**: extraia os termos significativos da query do usuário e
+   converta pra Slack syntax:
+   - Quem mandou → `from:@username` (sem `OR`; se houver dúvida de quem,
+     deixe o nome solto como keyword).
+   - Datas relativas → `after:YYYY-MM-DD` / `before:YYYY-MM-DD` /
+     `on:YYYY-MM-DD` (calcule a partir da data atual).
+   - Anexos/arquivos → `has:file` (ou `content_types: "files"` se a pergunta
+     é explicitamente sobre arquivos).
+   - Threads → `is:thread`.
+   - Frase exata → `"entre aspas"`.
+   - Palavras-chave restantes vão soltas (AND por default).
+2. **Filtro de canal**:
+   - Se `channels` está **vazio** (modo global): faça **uma** chamada sem
+     `in:`, buscando no workspace inteiro.
+   - Se `channels` tem itens: faça **uma chamada por canal**, prependendo
+     `in:<#ID>` (use o `id`; caia pro `in:#name` só se o id faltar) ao
+     conteúdo. Mescle os resultados das chamadas e ordene por data
+     (`sort: "timestamp"`) ou relevância.
+3. Chame (por canal, ou uma vez no global):
+
+```
+mcp__claude_ai_Slack__slack_search_public_and_private
+  query    = "<in:<#ID> se filtrado> <conteúdo>"
+  limit    = min(20, limit do query-knowledge)
+  sort     = "timestamp"  (ou "score" se a query é por relevância)
+```
+
+Para cada mensagem retornada, formate:
+
+```
+- <data curta> | <#canal> <autor> → <texto/snippet>
+```
+
+Se nada voltar, reporte: "Nenhuma mensagem bate `<query montada>` no Slack
+(<modo global | canais X, Y>). Tente termos mais gerais ou amplie o range
+temporal."
+
+Se o usuário pedir uma thread específica completa ("abre essa conversa"),
+chame `mcp__claude_ai_Slack__slack_read_thread` com o `channel_id` e o
+`message_ts` da mensagem-pai.
 
 ### 4. Formatar resposta
 
