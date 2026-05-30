@@ -44,11 +44,43 @@ class ScaffoldTest < Minitest::Test
   def test_install_returns_summary
     with_tmpdir do |dir|
       src = File.join(dir, "src")
-      FileUtils.mkdir_p(File.join(src, "vbrain-foo"))
-      File.write(File.join(src, "vbrain-foo", "SKILL.md"), "x")
-      summary = VBrain::Scaffold.install!(dir, skills_src: src)
+      FileUtils.mkdir_p(File.join(src, "skills", "vbrain-foo"))
+      File.write(File.join(src, "skills", "vbrain-foo", "SKILL.md"), "x")
+      FileUtils.mkdir_p(File.join(src, "scripts"))
+      File.write(File.join(src, "scripts", "x.rb"), "puts 1")
+      File.write(File.join(src, "Gemfile"), "source 'x'")
+      summary = VBrain::Scaffold.install!(
+        dir, skills_src: File.join(src, "skills"), src_root: src
+      )
       assert_equal true, summary["claude_md"]
       assert_equal 1, summary["skills_installed"]
+      assert_operator summary["code_installed"], :>, 0
+    end
+  end
+
+  def test_installs_code_copies_scripts_lib_and_bundler_files
+    with_tmpdir do |dir|
+      src = File.join(dir, "src")
+      FileUtils.mkdir_p(File.join(src, "scripts"))
+      FileUtils.mkdir_p(File.join(src, "lib", "vbrain"))
+      File.write(File.join(src, "scripts", "reindex.rb"), "puts 1")
+      File.write(File.join(src, "lib", "vbrain", "db.rb"), "module VBrain; end")
+      File.write(File.join(src, "Gemfile"), "source 'x'")
+      File.write(File.join(src, "Gemfile.lock"), "lock")
+      File.write(File.join(src, ".ruby-version"), "3.3.6")
+
+      count = VBrain::Scaffold.install_code!(dir, src)
+      assert_equal 5, count, "2 dirs + 3 arquivos"
+      assert File.exist?(File.join(dir, "scripts", "reindex.rb"))
+      assert File.exist?(File.join(dir, "lib", "vbrain", "db.rb"))
+      assert File.exist?(File.join(dir, "Gemfile.lock"))
+      assert_equal "3.3.6", File.read(File.join(dir, ".ruby-version"))
+    end
+  end
+
+  def test_install_code_refuses_to_copy_onto_itself
+    with_tmpdir do |dir|
+      assert_equal 0, VBrain::Scaffold.install_code!(dir, dir)
     end
   end
 

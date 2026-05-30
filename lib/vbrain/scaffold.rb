@@ -2,22 +2,32 @@ require "fileutils"
 require_relative "paths"
 
 module VBrain
-  # Instala os "assets do agente" no repo da base (~/vbrain): um CLAUDE.md que
-  # instrui qualquer agente a SEMPRE usar as skills vbrain, e uma cópia
-  # versionada das skills em .claude/skills/. Assim a base funciona em qualquer
-  # ambiente que a clone (ex.: cloud da Anthropic), não só onde o ~/.claude
-  # global já tem as skills instaladas.
+  # Instala os "assets do agente" no repo da base (~/vbrain) pra ela ser
+  # autossuficiente — rodar em qualquer ambiente que a clone (ex.: cloud da
+  # Anthropic), sem depender do repo de código separado:
+  #   - CLAUDE.md instruindo o agente a SEMPRE usar as skills;
+  #   - cópia versionada das skills em .claude/skills/ (cruas, paths relativos);
+  #   - cópia do código que as skills invocam: scripts/, lib/, Gemfile,
+  #     Gemfile.lock, .ruby-version.
+  # O código canônico continua no repo do projeto; aqui é uma cópia sincronizada
+  # por scripts/install.rb (rerode após git pull).
   module Scaffold
-    # Fonte das skills = .claude/skills/ deste repo de código (versionado).
-    SKILLS_SRC = File.join(Paths::PROJECT_ROOT, ".claude", "skills").freeze
+    SRC_ROOT   = Paths::PROJECT_ROOT
+    SKILLS_SRC = File.join(SRC_ROOT, ".claude", "skills").freeze
+
+    # Código copiado pra raiz da base (as skills cruas chamam `scripts/...` por
+    # caminho relativo, então precisam rodar do root da base).
+    CODE_DIRS  = %w[scripts lib].freeze
+    CODE_FILES = %w[Gemfile Gemfile.lock .ruby-version].freeze
 
     CLAUDE_MD = <<~MD
       # CLAUDE.md — base de conhecimento vbrain
 
-      Este repositório é a **sua base de conhecimento pessoal vbrain**: dados
-      versionados (`raw/`, `wiki/`, `db/vbrain.sqlite3`, `config/`) + as skills
-      do agente em `.claude/skills/`. O código Ruby vive em outro repo (o
-      projeto vbrain); estas skills chamam os scripts de lá.
+      Este repositório é a **sua base de conhecimento pessoal vbrain** e é
+      autossuficiente: contém os dados versionados (`raw/`, `wiki/`,
+      `db/vbrain.sqlite3`, `config/`), as skills do agente em `.claude/skills/`
+      e uma cópia do código Ruby que as skills usam (`scripts/`, `lib/`,
+      `Gemfile`, `Gemfile.lock`).
 
       ## Regra principal — SEMPRE use as skills vbrain
 
@@ -33,29 +43,31 @@ module VBrain
       | Criar uma rotina                                | `/vbrain-add-routine`             |
       | Rodar as rotinas (watch loop)                   | `/vbrain-routine`                 |
 
-      As skills estão versionadas em `.claude/skills/` deste repo de propósito:
-      pra funcionarem em qualquer máquina/ambiente que clone a base, não só onde
-      o `~/.claude` global as tem.
+      As skills (em `.claude/skills/`) usam caminhos relativos (`scripts/...`),
+      então rode-as a partir da **raiz deste repo**.
 
       ## Pré-requisitos
 
-      As skills são determinísticas em Ruby. Pra rodarem, o projeto de código
-      vbrain precisa estar disponível, com **Ruby 3.3.6** e `bundle install`
-      feito.
+      As skills são determinísticas em Ruby. Pra rodá-las aqui: **Ruby 3.3.6** e
+      `bundle install` (o `Gemfile`/`Gemfile.lock` já estão neste repo). Não é
+      preciso clonar o repo de código separado — o código está incluído aqui.
 
       ## Por quê (arquitetura)
 
       Wiki em markdown é a fonte da verdade; o SQLite (`db/vbrain.sqlite3`) é
       índice derivado — descartável (dá pra apagar e reconstruir com
-      `reindex.rb`), mas versionado por conveniência. O LLM só entra pro que
-      exige julgamento (chunkar, sintetizar páginas).
+      `scripts/reindex.rb`), mas versionado por conveniência. O LLM só entra pro
+      que exige julgamento (chunkar, sintetizar páginas). O código aqui é uma
+      cópia sincronizada por `scripts/install.rb` no repo de projeto; o canônico
+      vive lá.
     MD
 
-    # Escreve CLAUDE.md + copia skills. Retorna um resumo pro JSON da CLI.
-    def self.install!(dir = Paths.data_home, skills_src: SKILLS_SRC)
+    # Escreve CLAUDE.md + copia skills + copia código. Retorna resumo pro JSON.
+    def self.install!(dir = Paths.data_home, skills_src: SKILLS_SRC, src_root: SRC_ROOT)
       {
         "claude_md" => write_claude_md!(dir),
-        "skills_installed" => install_skills!(dir, skills_src)
+        "skills_installed" => install_skills!(dir, skills_src),
+        "code_installed" => install_code!(dir, src_root)
       }
     end
 
@@ -82,6 +94,32 @@ module VBrain
         FileUtils.cp_r(File.join(skills_src, name), target)
       end
       names.length
+    end
+
+    # Copia o código (scripts/, lib/ e os arquivos de bundler/ruby) pra raiz da
+    # base, tornando-a autossuficiente. Idempotente. Retorna nº de itens copiados.
+    # Guard: nunca copia em cima de si mesmo (quando a base == repo de código).
+    def self.install_code!(dir = Paths.data_home, src_root = SRC_ROOT)
+      return 0 if File.expand_path(dir) == File.expand_path(src_root)
+
+      copied = 0
+      CODE_DIRS.each do |name|
+        src = File.join(src_root, name)
+        next unless Dir.exist?(src)
+
+        target = File.join(dir, name)
+        FileUtils.rm_rf(target)
+        FileUtils.cp_r(src, target)
+        copied += 1
+      end
+      CODE_FILES.each do |name|
+        src = File.join(src_root, name)
+        next unless File.exist?(src)
+
+        FileUtils.cp(src, File.join(dir, name))
+        copied += 1
+      end
+      copied
     end
   end
 end

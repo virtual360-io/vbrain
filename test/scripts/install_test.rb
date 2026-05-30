@@ -90,6 +90,10 @@ class InstallCLITest < Minitest::Test
         # skills na base são cruas (paths relativos), não reescritas pra absoluto
         base_skill = File.read(File.join(base, ".claude", "skills", "vbrain-add-knowledge", "SKILL.md"))
         refute_includes base_skill, "BUNDLE_GEMFILE=#{PROJECT_ROOT}"
+        # base é autossuficiente: código copiado pra raiz
+        assert File.exist?(File.join(base, "scripts", "reindex.rb"))
+        assert File.exist?(File.join(base, "lib", "vbrain", "db.rb"))
+        assert File.exist?(File.join(base, "Gemfile.lock"))
       end
     end
   end

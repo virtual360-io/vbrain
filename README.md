@@ -18,8 +18,16 @@ Dois diretórios distintos:
 
 | Diretório                   | O que é                                                  | Versionado                       |
 |---|---|---|
-| `~/Workspace/vbrain/`       | **Este repo** — código (Ruby), skills, testes            | git aqui                         |
+| `~/Workspace/vbrain/`       | **Este repo** — código (Ruby), skills, testes (canônico) | git aqui                         |
 | `~/vbrain/` (`VBRAIN_HOME`) | **Sua base** — `raw/`, `wiki/`, `config/`, `db/vbrain.sqlite3` | git próprio, criado on demand |
+
+`scripts/install.rb` torna a base **autossuficiente**: além de instalar as
+skills no `~/.claude` global, copia pra base um `CLAUDE.md`, as skills cruas
+(`.claude/skills/`) e o código que elas usam (`scripts/`, `lib/`, `Gemfile`,
+`Gemfile.lock`, `.ruby-version`). Assim a base roda em qualquer ambiente que a
+clone (ex.: cloud) só com Ruby 3.3.6 + `bundle install`, sem precisar deste
+repo. O código aqui continua o **canônico**; a cópia na base é sincronizada
+re-rodando o install (a duplicação é intencional — trade-off por portabilidade).
 
 `VBRAIN_HOME` sobrescreve a localização da base (ex.: `~/Documents/vbrain`).
 A wiki vira um repo git separado no primeiro `add-knowledge` — privado, público

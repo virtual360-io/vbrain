@@ -73,5 +73,6 @@ puts JSON.generate(
   "remote_url" => remote_url,
   "visibility" => opts[:github] == "none" ? nil : opts[:github],
   "claude_md" => scaffold["claude_md"],
-  "skills_installed" => scaffold["skills_installed"]
+  "skills_installed" => scaffold["skills_installed"],
+  "code_installed" => scaffold["code_installed"]
 )
