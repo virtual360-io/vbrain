@@ -5,9 +5,10 @@ Bias: cautela > velocidade em qualquer coisa não-trivial. Use julgamento em
 tarefas triviais.
 
 Contexto curto: este repo é uma base de conhecimento pessoal estilo ai-memory.
-**Wiki em markdown é a fonte da verdade; o SQLite é índice descartável; o LLM
-só entra para o que exige julgamento (chunkar, sintetizar páginas)**. Veja
-`README.md` para a arquitetura completa.
+**Wiki em markdown é a fonte da verdade; o SQLite é índice derivado —
+descartável (dá pra apagar e reconstruir com `reindex.rb`), mas versionado
+junto da base por conveniência; o LLM só entra para o que exige julgamento
+(chunkar, sintetizar páginas)**. Veja `README.md` para a arquitetura completa.
 
 ## Regra 1 — Think Before Coding
 
@@ -124,6 +125,9 @@ No vbrain há convenções que parecem opinativas mas são intencionais:
 - `raw/` é **imutável** depois de gravado. Se o conteúdo precisa mudar,
   reingere.
 - Não existe `wiki/index.md`. O índice é o SQLite. Não tente recriar um.
+- O SQLite (`db/vbrain.sqlite3`) **é versionado** (não está no `.gitignore`):
+  índice derivado e descartável, mas commitado por conveniência. Apagar `db/`
+  + `reindex.rb` reconstrói tudo. Não re-adicione `/db/` ao ignore.
 
 ## Regra 12 — Falhe alto
 

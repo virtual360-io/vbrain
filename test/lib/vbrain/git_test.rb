@@ -13,7 +13,9 @@ class GitTest < Minitest::Test
       VBrain::Git.init!(dir)
       assert VBrain::Git.repo_initialized?(dir)
       assert File.exist?(File.join(dir, ".gitignore"))
-      assert_includes File.read(File.join(dir, ".gitignore")), "/db/"
+      # O SQLite é versionado (índice descartável, mas commitável), então /db/
+      # NÃO deve ser ignorado; só staging volátil sai do versionamento.
+      refute_includes File.read(File.join(dir, ".gitignore")), "/db/"
       assert_includes File.read(File.join(dir, ".gitignore")), "/raw/.tmp/"
       assert_equal "main", VBrain::Git.current_branch(dir)
       log = `git -C #{dir.shellescape} log --oneline`
@@ -47,6 +49,18 @@ class GitTest < Minitest::Test
       assert_equal "add: hi", result["message"]
       log = `git -C #{dir.shellescape} log --oneline`
       assert_match(/add: hi/, log)
+    end
+  end
+
+  def test_commit_versions_the_sqlite_index
+    with_tmpdir do |dir|
+      VBrain::Git.init!(dir)
+      FileUtils.mkdir_p(File.join(dir, "db"))
+      File.write(File.join(dir, "db", "vbrain.sqlite3"), "SQLite format 3\0")
+      result = VBrain::Git.commit!("index", dir)
+      assert_equal true, result["committed"]
+      tracked = `git -C #{dir.shellescape} ls-files db/`
+      assert_includes tracked, "db/vbrain.sqlite3", "índice SQLite deve ser versionado"
     end
   end
 

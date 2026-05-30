@@ -4,9 +4,11 @@ Base de conhecimento pessoal — inspirada em
 [akitaonrails/ai-memory](https://github.com/akitaonrails/ai-memory), reduzida
 a três Claude Code skills + scripts Ruby determinísticos + SQLite FTS5.
 
-A premissa: **wiki em markdown é a fonte da verdade; o SQLite é só índice
-derivado e descartável; o LLM só entra para o que exige julgamento (chunkar,
-sintetizar páginas)**. Todo o resto é Ruby testado.
+A premissa: **wiki em markdown é a fonte da verdade; o SQLite é índice
+derivado — descartável (dá pra apagar e reconstruir com `reindex.rb`), mas
+versionado junto da base por conveniência (clone/pull já trazem o índice
+pronto); o LLM só entra para o que exige julgamento (chunkar, sintetizar
+páginas)**. Todo o resto é Ruby testado.
 
 ## Arquitetura
 
@@ -42,11 +44,14 @@ ou só-local conforme escolha do usuário (ver `scripts/init_repo.rb`).
     └── vbrain.sqlite3   # índice puro — `pages` + virtual `pages_fts` (FTS5) + `links` (grafo)
 ```
 
-Apagar `db/` e rodar `scripts/reindex.rb` reconstrói o índice inteiro a partir
-de `wiki/` — incluindo o grafo: o reindex parseia os `[[wikilinks]]` do corpo
-das páginas e remonta a tabela `links`. Não existe `wiki/index.md` nem pastas
-por tipo — espelhamos o ai-memory: a estrutura é o grafo de links + o SQLite
-derivado, e a LLM organiza as páginas livremente.
+`db/vbrain.sqlite3` **é versionado** (commitado junto da base): o `.gitignore`
+gerado por `lib/vbrain/git.rb` deixa `/db/` fora da lista de ignore, e o
+`commit.rb` (via `git add -A`) o inclui. Isso é só conveniência — o índice
+continua **descartável**: apagar `db/` e rodar `scripts/reindex.rb` reconstrói
+tudo a partir de `wiki/`, incluindo o grafo (o reindex parseia os
+`[[wikilinks]]` do corpo das páginas e remonta a tabela `links`). Não existe
+`wiki/index.md` nem pastas por tipo — espelhamos o ai-memory: a estrutura é o
+grafo de links + o SQLite derivado, e a LLM organiza as páginas livremente.
 
 ### Skills (interface com o Claude Code)
 

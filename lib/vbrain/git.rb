@@ -4,8 +4,11 @@ require_relative "paths"
 
 module VBrain
   module Git
+    # O SQLite (db/vbrain.sqlite3) é um índice descartável — pode ser apagado e
+    # reconstruído com scripts/reindex.rb — mas é versionado por conveniência
+    # (clone/pull já trazem o índice pronto, sem precisar reindexar). Por isso
+    # /db/ NÃO entra no .gitignore. Só staging volátil e lixo de SO ficam fora.
     GITIGNORE = <<~IGN.freeze
-      /db/
       /raw/.tmp/
       .DS_Store
     IGN
@@ -30,7 +33,7 @@ module VBrain
     def self.write_gitignore!(dir = Paths.data_home)
       path = File.join(dir, ".gitignore")
       existing = File.exist?(path) ? File.read(path) : ""
-      return path if existing.include?("/db/") && existing.include?("/raw/.tmp/")
+      return path if existing.include?("/raw/.tmp/")
 
       File.write(path, GITIGNORE)
       path
