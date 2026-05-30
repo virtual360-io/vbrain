@@ -113,5 +113,23 @@ if opts[:seed]
   puts "rotinas-padrão: seeded=#{seed['seeded'].join(',')} skipped=#{seed['skipped'].join(',')}"
 end
 
+# Instala também na base (~/vbrain): CLAUDE.md + cópia versionada das skills.
+# Diferente do target global (paths reescritos pra absoluto), aqui as skills vão
+# cruas (paths relativos) — portáteis pra qualquer ambiente que clone a base.
+base = VBrain::Paths.data_home
+puts
+if opts[:dry_run]
+  skill_count = Dir.children(SKILLS_SRC).count { |c| File.directory?(File.join(SKILLS_SRC, c)) }
+  puts "base (#{base}): (dry-run) escreveria CLAUDE.md + #{skill_count} skills cruas"
+else
+  summary = VBrain::Scaffold.install!(base)
+  committed = false
+  if VBrain::Git.repo_initialized?(base) && VBrain::Git.changes?(base)
+    VBrain::Git.commit!("chore: assets do agente vbrain na base (CLAUDE.md + skills)", base)
+    committed = true
+  end
+  puts "base (#{base}): CLAUDE.md=#{summary['claude_md']} skills=#{summary['skills_installed']} committed=#{committed}"
+end
+
 puts
 puts opts[:dry_run] ? "(dry-run; nothing written)" : "Skills instaladas. Reabra o Claude Code para detectar."

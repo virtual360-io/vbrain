@@ -47,6 +47,11 @@ end
 
 VBrain::Git.init!(data_home)
 
+# Instala CLAUDE.md + skills versionadas na base e commita junto, pra base
+# funcionar em qualquer ambiente que a clone (não só no ~/.claude global).
+scaffold = VBrain::Scaffold.install!(data_home)
+VBrain::Git.commit!("chore: assets do agente vbrain (CLAUDE.md + skills)", data_home)
+
 remote_url = nil
 if opts[:github] != "none"
   visibility_flag = "--#{opts[:github]}"
@@ -66,5 +71,7 @@ puts JSON.generate(
   "branch" => VBrain::Git.current_branch(data_home),
   "has_remote" => !remote_url.nil?,
   "remote_url" => remote_url,
-  "visibility" => opts[:github] == "none" ? nil : opts[:github]
+  "visibility" => opts[:github] == "none" ? nil : opts[:github],
+  "claude_md" => scaffold["claude_md"],
+  "skills_installed" => scaffold["skills_installed"]
 )

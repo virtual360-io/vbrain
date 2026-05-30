@@ -18,6 +18,11 @@ class InitRepoCLITest < Minitest::Test
       assert_equal "main", data["branch"]
       assert_equal false, data["has_remote"]
       assert File.exist?(File.join(home, ".gitignore"))
+      # Instala os assets do agente na base: CLAUDE.md + skills versionadas.
+      assert_equal true, data["claude_md"]
+      assert_operator data["skills_installed"], :>, 0
+      assert File.exist?(File.join(home, "CLAUDE.md"))
+      assert File.directory?(File.join(home, ".claude", "skills"))
     end
   ensure
     ENV["VBRAIN_HOME"] = VBRAIN_TEST_HOME
