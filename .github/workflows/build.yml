@@ -1,0 +1,55 @@
+name: build
+
+# A cada commit na main: roda os testes e regenera o binário vbrain para
+# todos os alvos, publicando numa release rolling "latest". Tudo é puro-Go
+# (modernc.org/sqlite, go-git, chromedp), então cross-compila de um runner só
+# com CGO_ENABLED=0 — sem matriz de SOs.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # criar/atualizar a release "latest"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build (cross-platform)
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          targets="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64"
+          for t in $targets; do
+            os="${t%/*}"; arch="${t#*/}"
+            out="dist/vbrain-${os}-${arch}"
+            [ "$os" = "windows" ] && out="${out}.exe"
+            echo "→ $out"
+            GOOS="$os" GOARCH="$arch" go build -trimpath \
+              -ldflags "-s -w" -o "$out" ./cmd/vbrain
+          done
+          (cd dist && sha256sum vbrain-* > SHA256SUMS)
+          ls -la dist
+
+      - name: Publish rolling "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Build automático do commit ${GITHUB_SHA}."
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest dist/* --clobber
+          else
+            gh release create latest dist/* \
+              --title "latest" --notes "$notes" --prerelease
+          fi
