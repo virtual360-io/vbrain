@@ -1,283 +1,282 @@
 ---
 name: vbrain-add-knowledge
-description: Ingere um arquivo ou URL no vbrain — copia para raw/, quebra em chunks via subagente, gera páginas wiki grounded, reindexa SQLite FTS5. Use quando o usuário pedir "salva isso no vbrain", "adiciona à base", ou fornecer um arquivo de notas/markdown, uma URL (artigo, blog) ou um tweet/X article para arquivar.
+description: Ingests a file or URL into vbrain — copies it to raw/, chunks it via a sub-agent, generates grounded wiki pages, reindexes SQLite FTS5. Use when the user asks "save this to vbrain", "add to the base", or provides a notes/markdown file, a URL (article, blog), or a tweet/X article to archive.
 allowed-tools: Bash, Read, Write, Agent, AskUserQuestion, WebFetch
 ---
 
 # vbrain-add-knowledge
 
-Pipeline determinístico (Go) + 2 subagentes LLM (chunker + wiki-writer) para
-transformar um arquivo bruto em páginas wiki indexadas no vbrain.
+Deterministic pipeline (Go) + 2 LLM sub-agents (chunker + wiki-writer) to turn a
+raw file into wiki pages indexed in vbrain.
 
 ## Inputs
 
-- **path** (obrigatório): caminho absoluto do arquivo OU URL (http/https).
-- **--type** (opcional): força o `source_type` (`text` | `url` | `tweet`)
-  quando a detecção heurística errar. Só inclua se o usuário pedir.
+- **path** (required): absolute path to the file OR a URL (http/https).
+- **--type** (optional): force the `source_type` (`text` | `url` | `tweet`)
+  when the heuristic detection is wrong. Only include it if the user asks.
 
-## Fontes suportadas
+## Supported sources
 
-| `source_type` | Detecção | Como extrai |
+| `source_type` | Detection | How it extracts |
 |---|---|---|
-| `tweet` | URL `twitter.com|x.com/<user>/status/<id>` | Syndication endpoint público (`cdn.syndication.twimg.com`) + Playwright + Chrome do sistema pra puxar body completo de X Articles linkados |
-| `url` | Outras URLs http(s) | Jina Reader (`r.jina.ai`) — retorna markdown limpo |
-| `text` | `.md`, `.txt`, sem extensão + UTF-8 | passthrough |
+| `tweet` | URL `twitter.com|x.com/<user>/status/<id>` | Public syndication endpoint (`cdn.syndication.twimg.com`) + headless Chrome to pull the full body of linked X Articles |
+| `url` | Other http(s) URLs | Jina Reader (`r.jina.ai`) — returns clean markdown |
+| `text` | `.md`, `.txt`, extensionless + UTF-8 | passthrough |
 
-## Passos
+## Steps
 
-### 0. Garantir repo git no `~/vbrain` (apenas no 1º ingest)
+### 0. Ensure a git repo in `~/vbrain` (first ingest only)
 
-Antes de qualquer outra coisa, verifique se `~/vbrain/.git/` existe:
+Before anything else, check whether `~/vbrain/.git/` exists:
 
 ```bash
 test -d ~/vbrain/.git && echo present || echo absent
 ```
 
-**Se ausente** (primeira ingestão da base), use `AskUserQuestion` para perguntar:
+**If absent** (first ingestion into the base), use `AskUserQuestion`:
 
-> "Sua base ainda não é um repositório git. Quero versionar a wiki/raw para
-> você poder revertir/sincronizar entre máquinas. O que prefere?"
+> "Your base isn't a git repository yet. I'd like to version wiki/raw so you can
+> revert/sync across machines. What do you prefer?"
 >
-> 1. **Repo privado no GitHub** (Recommended)
-> 2. **Repo público no GitHub**
-> 3. **Só git local, sem GitHub**
-> 4. **Pular versionamento por agora**
+> 1. **Private repo on GitHub** (Recommended)
+> 2. **Public repo on GitHub**
+> 3. **Local git only, no GitHub**
+> 4. **Skip versioning for now**
 
-Conforme a resposta, rode:
+Depending on the answer, run:
 
-- Privado: `vbrain setup --github private`
-- Público: `vbrain setup --github public`
+- Private: `vbrain setup --github private`
+- Public: `vbrain setup --github public`
 - Local: `vbrain setup`
-- Pular: não rode nada, e marque mentalmente que o passo 6 deve ser pulado.
+- Skip: don't run anything, and note mentally that step 6 should be skipped.
 
-Parse o JSON:
+Parse the JSON:
 
-- `{"initialized":true,...,"remote_url":"..."}` → repo pronto, siga.
-- `{"initialized":false,"reason":"already a repo"}` → idempotente, siga.
-- `{"needs_gh":true}` → `gh` não instalado. Use `AskUserQuestion` perguntando
-  se o usuário quer instalar (`brew install gh && gh auth login`). Se sim,
-  rode os comandos e depois re-rode `vbrain setup`. Se não, caia para "Só git
-  local" (`vbrain setup` sem `--github`).
-- `{"needs_gh_auth":true}` → `gh` está instalado mas não autenticado.
-  Instrua o usuário a rodar `gh auth login` num terminal interativo (você
-  não consegue rodar comandos interativos), depois re-rode.
+- `{"initialized":true,...,"remote_url":"..."}` → repo ready, proceed.
+- `{"initialized":false,"reason":"already a repo"}` → idempotent, proceed.
+- `{"needs_token":true}` → no GitHub PAT available. Use `AskUserQuestion` to ask
+  whether the user wants to provide a PAT (scope `repo`). If yes, re-run
+  `vbrain setup --github <vis> --token <PAT>`. If no, fall back to "Local git
+  only" (`vbrain setup` without `--github`).
 
-**Se presente**: siga direto para o passo 1.
+**If present**: go straight to step 1.
 
-### 1. Ingerir o raw
+### 1. Ingest the raw
 
 ```bash
 vbrain ingest <path>
 ```
 
-Parse o JSON de saída. Possíveis casos:
+Parse the output JSON. Possible cases:
 
-- `{"source_type":"text"|"url"|"tweet","raw_id":N,"raw_path":...,"extracted_path":...}` → siga ao passo 2.
-- `{"duplicate":true,"raw_id":N,...}` → o sha256 desse arquivo já existe.
-  Pergunte ao usuário se quer reprocessar (`--force`) ou abortar.
-- `{"source_type":"unknown",...}` **OU** a extração determinística retornou
-  conteúdo trivial (< 100 palavras úteis, login wall, "Sign in", "Continue
-  with Apple", etc.):
-  - **DEFAULT: via LLM.** Não pergunte ao usuário se vale criar uma fonte
-    permanente. Use `WebFetch` (para URLs) ou um subagente extractor genérico
-    (para arquivos) para gerar texto plano em
-    `raw/.tmp/extracted-<raw_id>.txt`. Atualize a row em `raw_sources` para
-    `source_type='oneshot'`. Em seguida siga ao passo 2 usando
-    `prompts/chunker/text.md` como chunker.
-  - **Caso especial — links do X/Twitter** (tweets, X Articles, posts gated):
-    NÃO tente builds determinísticos adicionais. NÃO sugira `Sources::X`. X
-    bloqueia scraping consistentemente; o caminho que sempre funciona é
-    `WebFetch` lendo a URL como um humano leria, e usar o resultado como
-    input do chunker. O mesmo vale para qualquer site com auth/paywall.
-  - Só sugira "criar fonte permanente" se o usuário pedir explicitamente
-    ("quero ingerir muitos arquivos desse formato, vale fazer fonte?").
+- `{"source_type":"text"|"url"|"tweet","raw_id":N,"raw_path":...,"extracted_path":...}` → proceed to step 2.
+- `{"duplicate":true,"raw_id":N,...}` → this file's sha256 already exists. Ask
+  the user whether to reprocess (`--force`) or abort.
+- `{"source_type":"unknown",...}` **OR** the deterministic extraction returned
+  trivial content (< 100 useful words, login wall, "Sign in", "Continue with
+  Apple", etc.):
+  - **DEFAULT: via LLM.** Don't ask the user whether it's worth creating a
+    permanent source. Use `WebFetch` (for URLs) or a generic extractor sub-agent
+    (for files) to produce plain text in `raw/.tmp/extracted-<raw_id>.txt`.
+    Update the `raw_sources` row to `source_type='oneshot'`. Then proceed to
+    step 2 using `prompts/chunker/text.md` as the chunker.
+  - **Special case — X/Twitter links** (tweets, X Articles, gated posts): do NOT
+    attempt additional deterministic builds. Do NOT suggest a dedicated source.
+    X blocks scraping consistently; the path that always works is `WebFetch`
+    reading the URL the way a human would, and using the result as the chunker
+    input. The same applies to any site with auth/paywall.
+  - Only suggest "create a permanent source" if the user explicitly asks ("I
+    want to ingest many files of this format, is it worth a source?").
 
-### 2. Chunkar (subagente)
+### 2. Chunk (sub-agent)
 
-Leia `extracted_path`. Lance um subagente `general-purpose` com o conteúdo de
-`prompts/chunker/<source_type>.md` como system prompt e o texto extraído como
-user message. Exija saída JSON estrita.
+Read `extracted_path`. Launch a `general-purpose` sub-agent with the content of
+`prompts/chunker/<source_type>.md` as the system prompt and the extracted text
+as the user message. Require strict JSON output.
 
-Schema esperado:
+Expected schema:
 
 ```json
 {"chunks":[
   {"suggested_title":"...",
    "kind":"concept|decision|gotcha|note|rule",
    "tags":["..."],
-   "raw_excerpt":"trecho literal",
-   "summary_hint":"1 frase neutra"}
+   "raw_excerpt":"literal excerpt",
+   "summary_hint":"1 neutral sentence"}
 ]}
 ```
 
-Se `chunks` vier **vazio**, NÃO aborte ainda — siga o passo 2b.
+If `chunks` comes back **empty**, do NOT abort yet — follow step 2b.
 
-### 2b. Fallback de extração (quando chunker retorna 0 chunks)
+### 2b. Extraction fallback (when the chunker returns 0 chunks)
 
-Significa que a extração determinística não rendeu conteúdo durável. Tente em
-ordem, **parando ao primeiro que produzir chunks > 0**:
+It means the deterministic extraction didn't yield durable content. Try in
+order, **stopping at the first one that produces chunks > 0**:
 
-1. **Follow embedded links** (essencial para tweets que são só link de artigo):
-   Abra `extracted_path` e procure por seção `## Links citados` ou `## Referências`
-   com URLs, ou por uma URL dominante no body. Para cada URL encontrada (limite
-   3 mais relevantes — priorize artigos/blogs sobre `t.co`/encurtadores já
-   expandidos):
-   - Rode `WebFetch` na URL com o prompt:
-     > "Extraia o conteúdo principal do artigo em markdown limpo (título,
-     > autor se houver, corpo integral preservando estrutura). Se for login
-     > wall ou redirect pra Sign in, reporte explicitamente."
-   - Concatene as respostas com headings `## <URL>` em
+1. **Follow embedded links** (essential for tweets that are just an article
+   link): Open `extracted_path` and look for a `## Cited links` or `## References`
+   section with URLs, or a dominant URL in the body. For each URL found (limit to
+   the 3 most relevant — prioritize articles/blogs over already-expanded
+   `t.co`/shorteners):
+   - Run `WebFetch` on the URL with the prompt:
+     > "Extract the article's main content as clean markdown (title, author if
+     > any, full body preserving structure). If it's a login wall or a redirect
+     > to Sign in, report it explicitly."
+   - Concatenate the responses with `## <URL>` headings into
      `raw/.tmp/extracted-<raw_id>-followed.txt`.
-   - Re-rode o chunker subagente com `prompts/chunker/text.md` (não mais
-     `tweet.md` — agora é conteúdo de artigo) e o novo arquivo. Se gerar
-     chunks, siga.
+   - Re-run the chunker sub-agent with `prompts/chunker/text.md` (no longer
+     `tweet.md` — it's article content now) and the new file. If it produces
+     chunks, proceed.
 
-2. **Wayback Machine** (se WebFetch deu erro HTTP 4xx/5xx ou login wall):
-   Para cada URL que falhou, tente `https://web.archive.org/web/<URL>` via
-   `WebFetch`. Salve no mesmo `extracted-<raw_id>-followed.txt`. Re-rode o
+2. **Wayback Machine** (if WebFetch gave an HTTP 4xx/5xx error or a login wall):
+   For each URL that failed, try `https://web.archive.org/web/<URL>` via
+   `WebFetch`. Save into the same `extracted-<raw_id>-followed.txt`. Re-run the
    chunker.
 
-3. **Pedir ao usuário** (último recurso): Use `AskUserQuestion` perguntando
-   se quer:
-   (a) Colar o conteúdo do artigo na próxima mensagem — você salva no
-       `extracted-<raw_id>-followed.txt` e re-roda chunker.
-   (b) Descartar a ingestão (passo 6 só commita o raw como audit log).
-   (c) Tentar URL diferente.
+3. **Ask the user** (last resort): Use `AskUserQuestion` to ask whether they
+   want to:
+   (a) Paste the article content in the next message — you save it into
+       `extracted-<raw_id>-followed.txt` and re-run the chunker.
+   (b) Discard the ingestion (step 6 only commits the raw as an audit log).
+   (c) Try a different URL.
 
-4. **Honest abort**: se o usuário descartar, pule passos 3-5 mas siga o passo
-   6 (commit do raw como audit; reporte explicitamente "nenhuma página criada").
+4. **Honest abort**: if the user discards, skip steps 3-5 but follow step 6
+   (commit the raw as audit; explicitly report "no page created").
 
-### 3. Escrever wiki (subagente, **estritamente um chunk por vez**)
+### 3. Write wiki (sub-agent, **strictly one chunk at a time**)
 
-Processe os chunks **um de cada vez, em sequência — NUNCA em paralelo**. Cada
-chunk percorre o ciclo completo **writer → persistir → reindexar** antes de o
-próximo começar. É isso que faz o writer seguinte enxergar (e mesclar com) as
-páginas que os anteriores criaram: ele navega o índice **já atualizado**.
+Process the chunks **one at a time, in sequence — NEVER in parallel**. Each
+chunk goes through the full **writer → persist → reindex** cycle before the next
+one starts. That's what lets the next writer see (and merge with) the pages the
+previous ones created: it navigates the **already-updated** index.
 
-> **Regra dura:** nunca lance dois writers na mesma mensagem. Um writer, um
-> `write_pages`, um `reindex`, e só então o próximo chunk. Paralelizar quebra a
-> navegação do grafo e pode fazer dois chunks atropelarem a mesma página.
+> **Hard rule:** never launch two writers in the same message. One writer, one
+> `write-pages`, one `reindex`, and only then the next chunk. Parallelizing
+> breaks graph navigation and can make two chunks clobber the same page.
 
-Para **cada chunk**, na ordem, faça o ciclo:
+For **each chunk**, in order, do the cycle:
 
-1. **Writer** — lance UM subagente `general-purpose` (com Bash + Read) usando
-   `prompts/wiki-writer.md` como system prompt. No user message passe: o chunk
-   (JSON do chunker), o caminho absoluto da wiki (`<data_home>/wiki`), o
-   `source_raw`, e o comando de navegação
-   `vbrain query "<termos>" --format json --limit 8`.
-   O writer devolve UM JSON: `op` (`create`|`update`), `slug` (quando `update`),
-   `title`, `tags`, `kind`, `body_markdown` (corpo **final completo**).
-2. **Persistir** — escreva esse único page-object em
-   `raw/.tmp/page-<raw_id>.json` (`{"pages":[<o objeto>]}`) e rode o passo 4.
-3. **Reindexar** — rode o passo 4b (linkify) e o passo 5 (reindex) **agora**,
-   pra que o próximo writer veja esta página no índice.
+1. **Writer** — launch ONE `general-purpose` sub-agent (with Bash + Read) using
+   `prompts/wiki-writer.md` as the system prompt. In the user message pass: the
+   chunk (chunker JSON), the wiki's absolute path (`<data_home>/wiki`), the
+   `source_raw`, and the navigation command
+   `vbrain query "<terms>" --format json --limit 8`.
+   The writer returns ONE JSON: `op` (`create`|`update`), `slug` (when
+   `update`), `title`, `tags`, `kind`, `body_markdown` (the **final, complete**
+   body).
+2. **Persist** — write that single page-object to `raw/.tmp/page-<raw_id>.json`
+   (`{"pages":[<the object>]}`) and run step 4.
+3. **Reindex** — run step 4b (linkify) and step 5 (reindex) **now**, so the next
+   writer sees this page in the index.
 
-Só depois de reindexar, parta pro próximo chunk. Não acumule páginas pra um
-`write_pages` em lote — o ciclo é por chunk.
+Only after reindexing, move to the next chunk. Don't accumulate pages for a
+batch `write-pages` — the cycle is per chunk.
 
-### 4. Persistir a página (staging + publicação atômica)
+### 4. Persist the page (staging + atomic publish)
 
 ```bash
 vbrain write-pages --raw-id <N> --pages-json raw/.tmp/page-<N>.json
 ```
 
-O script encena a página (corpo inteiro) em `raw/.tmp/wiki-stage-<N>/` e só então
-a move pra `wiki/` via rename — a wiki nunca fica num estado meio-escrito.
+The command stages the page (whole body) in `raw/.tmp/wiki-stage-<N>/` and only
+then moves it into `wiki/` via rename — the wiki is never left half-written.
 
-- `op: "create"` → arquivo novo (slug derivado do título; sufixo `-2` só em
-  colisão real com outro assunto).
-- `op: "update"` → sobrescreve o corpo inteiro da página existente (`slug`) e
-  mescla o frontmatter (union de `tags`; `source_raw` acumula o raw novo). Se o
-  `slug` não existir, cai pra `create` (defesa anti-alucinação).
+- `op: "create"` → new file (slug derived from the title; `-2` suffix only on a
+  real collision with a different subject).
+- `op: "update"` → overwrites the whole body of the existing page (`slug`) and
+  merges the frontmatter (union of `tags`; `source_raw` accumulates the new
+  raw). If the `slug` doesn't exist, it falls back to `create` (anti-
+  hallucination defense).
 
-A saída JSON tem `{"written":[...],"updated":[...],"count":N}`. Páginas de
-conhecimento moram na **raiz** de `wiki/` (espaço plano, sem pastas por tipo).
+The JSON output has `{"written":[...],"updated":[...],"count":N}`. Knowledge
+pages live at the **root** of `wiki/` (flat space, no per-type folders).
 
-### 4b. Linkificar (determinístico) + resolver não-resolvidos (LLM)
+### 4b. Linkify (deterministic) + resolve unresolved (LLM)
 
 ```bash
 vbrain linkify
 ```
 
-Converte os `[[wikilinks]]` resolvíveis por slug exato em links markdown
-`[Título](slug.md)` — **navegáveis no GitHub e no Obsidian** (o GitHub não
-renderiza `[[ ]]` em arquivos de repo). Determinístico, idempotente, preserva
-o frontmatter verbatim. Saída: `{"changed":N,"scanned":N}`.
+Converts the `[[wikilinks]]` resolvable by exact slug into markdown links
+`[Title](slug.md)` — **navigable on GitHub and Obsidian** (GitHub doesn't render
+`[[ ]]` in repo files). Deterministic, idempotent, preserves the frontmatter
+verbatim. Output: `{"changed":N,"scanned":N}`.
 
-Depois do `vbrain reindex` (passo 5), os links que sobraram **não-resolvidos**
-(slug do título não bate com nenhuma página) ficam na tabela `links` com
-`to_page_id NULL`. Para fortalecer o grafo, uma **camada de julgamento (LLM)**
-decide a qual página existente cada um se refere:
+After `vbrain reindex` (step 5), the links that remained **unresolved** (the
+title's slug doesn't match any page) stay in the `links` table with
+`to_page_id NULL`. To strengthen the graph, a **judgment layer (LLM)** decides
+which existing page each one refers to:
 
-1. Liste os não-resolvidos e o índice de páginas:
+1. List the unresolved ones and the page index:
    `SELECT DISTINCT target_title FROM links WHERE to_page_id IS NULL` +
    `SELECT path, title FROM pages`.
-2. Lance um subagente que, para cada `target_title`, escolhe o `slug` da página
-   existente que ele referencia (ou `null` se nenhuma servir — **não inventar**).
-   Saída: JSON `{"Título": "slug" | null}`.
-3. Aplique determinísticamente e reindexe:
+2. Launch a sub-agent that, for each `target_title`, picks the `slug` of the
+   existing page it references (or `null` if none fits — **don't invent**).
+   Output: JSON `{"Title": "slug" | null}`.
+3. Apply deterministically and reindex:
    ```bash
    vbrain resolve-links --map raw/.tmp/linkmap.json
    vbrain reindex
    ```
-   `vbrain resolve-links` descarta slugs que não existem (defesa anti-alucinação).
+   `vbrain resolve-links` discards slugs that don't exist (anti-hallucination
+   defense).
 
-### 5. Reindexar
+### 5. Reindex
 
 ```bash
 vbrain reindex
 ```
 
-A saída tem `{"inserted":N,"updated":N,"deleted":N,"links":N}`. O índice é
-puramente o SQLite (`pages` + virtual `pages_fts` + tabela `links`); triggers
-AI/AD/AU sincronizam o FTS5 automaticamente. Além de reindexar o FTS, o
-`vbrain reindex` **parseia os `[[wikilinks]]` do body e reconstrói o grafo** na
-tabela `links` (alvo inexistente → aresta com `to_page_id` NULL, resolvida num
-reindex futuro). Não há `wiki/index.md` — espelhamos o ai-memory: a estrutura
-é o grafo de links + o SQLite derivado, não uma árvore de pastas.
+The output has `{"inserted":N,"updated":N,"deleted":N,"links":N}`. The index is
+purely SQLite (`pages` + virtual `pages_fts` + the `links` table); AI/AD/AU
+triggers sync FTS5 automatically. Besides reindexing the FTS, `vbrain reindex`
+**parses the `[[wikilinks]]` from the body and rebuilds the graph** in the
+`links` table (a nonexistent target → an edge with `to_page_id` NULL, resolved
+in a future reindex). There is no `wiki/index.md` — we mirror ai-memory: the
+structure is the link graph + the derived SQLite, not a folder tree.
 
 ### 6. Commit + push
 
-Se o passo 0 não foi pulado:
+If step 0 wasn't skipped:
 
 ```bash
-vbrain commit --message "add: <N> páginas de <basename>"
+vbrain commit --message "add: <N> pages from <basename>"
 ```
 
-Onde `<N>` é o `count` retornado em 4 e `<basename>` é o nome curto do
-arquivo/URL original. O script é idempotente:
+Where `<N>` is the `count` returned in step 4 and `<basename>` is the short name
+of the original file/URL. The command is idempotent:
 
-- Se não há mudanças no `~/vbrain/` (caso degenerado: chunker retornou 0
-  páginas), retorna `{"committed":false,"reason":"no changes"}`.
-- Se há mudanças, commita e tenta push automaticamente quando há `origin`
-  configurado (`{"pushed":true}`).
-- Sem remote, só commita local (`{"pushed":false,"reason":"no remote"}`).
+- If there are no changes in `~/vbrain/` (degenerate case: the chunker returned 0
+  pages), it returns `{"committed":false,"reason":"no changes"}`.
+- If there are changes, it commits and tries to push automatically when there's
+  an `origin` configured (`{"pushed":true}`).
+- Without a remote, it only commits locally (`{"pushed":false,"reason":"no remote"}`).
 
-Não interrompa o pipeline se o push falhar — o commit local foi feito; reporte
-o erro e siga.
+Don't interrupt the pipeline if the push fails — the local commit was made;
+report the error and proceed.
 
-### 7. Reportar ao usuário
+### 7. Report to the user
 
-Mostre:
-- Tipo detectado (`source_type`)
-- Páginas **criadas** (`written`) e **atualizadas** (`updated`) em `wiki/`
-- Estatísticas do banco: `vbrain stats` (retorna JSON com
-  total de páginas, distribuição por kind e 5 mais recentes)
-- Status do commit/push (sha + remote URL quando aplicável)
+Show:
+- The detected type (`source_type`)
+- Pages **created** (`written`) and **updated** (`updated`) in `wiki/`
+- Database stats: `vbrain stats` (returns JSON with total pages, distribution by
+  kind, and the 5 most recent)
+- Commit/push status (sha + remote URL when applicable)
 
-## Regras duras
+## Hard rules
 
-- **Nunca** escrever em `wiki/` diretamente; sempre via `vbrain write-pages`.
-- **Nunca** modificar `raw/` depois de ingerido — é imutável.
-- Se `go test` falhar antes da execução final (caso 1 do tipo desconhecido),
-  **não** prosseguir até o usuário consertar.
-- **FAITHFULNESS**: os subagentes têm regra dura de não inventar; se eles
-  retornarem dados claramente fabricados, sinalize ao usuário.
-- **Tweet com link para artigo → seguir o link**: quando o tweet ingerido tem
-  pouco/nenhum texto próprio mas referencia uma URL externa (artigo, blog,
-  thread em outro site), o usuário quer **o conteúdo do artigo**, não só o
-  metadado do tweet. O passo 2b é obrigatório nesse caso — não termine "sem
-  páginas" se há link a seguir.
-- **Tentativas de fallback são ordenadas e exaustivas**: WebFetch direto →
-  Wayback Machine → pedir manual ao usuário. Nunca pular pra "abort" sem
-  exercitar a chain.
+- **Never** write into `wiki/` directly; always via `vbrain write-pages`.
+- **Never** modify `raw/` after ingestion — it's immutable.
+- If `go test` fails before the final run (case 1 of the unknown type), do
+  **not** proceed until the user fixes it.
+- **FAITHFULNESS**: the sub-agents have a hard rule not to invent; if they
+  return clearly fabricated data, flag it to the user.
+- **Tweet with a link to an article → follow the link**: when the ingested tweet
+  has little/no text of its own but references an external URL (article, blog,
+  thread on another site), the user wants **the article's content**, not just
+  the tweet metadata. Step 2b is mandatory in that case — don't finish with "no
+  pages" if there's a link to follow.
+- **Fallback attempts are ordered and exhaustive**: direct WebFetch → Wayback
+  Machine → ask the user manually. Never jump to "abort" without exercising the
+  chain.
