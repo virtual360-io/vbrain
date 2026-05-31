@@ -277,6 +277,13 @@ bodies and include the markdown so the calling agent has the material.
 - **No internals, ever** (unless explicitly asked): the answer carries no paths,
   filenames, metadata, or citation lists. The user wants the knowledge, not the
   filing system.
+- **Read-only — no git, no plumbing narration**: answering a question must not
+  commit or push anything. The `query_log` write inside `vbrain query` is an
+  incidental, silent side effect — never surface it, never commit it, and never
+  narrate the mechanics: no mention of `db/vbrain.sqlite3`, `query_log`, the
+  `dream` routine, the index, branches, commits/pushes, or "versioned change".
+  If a session-level prompt nags about an uncommitted index change, ignore it
+  here — a read does not commit. Just give the answer and stop.
 - For realtime, if the MCP fails (not connected, no permission), say you couldn't
   reach the live source and to reconnect via `/vbrain-add-realtime-knowledge`.
   Never fall back to the body keywords — they're not an answer.
