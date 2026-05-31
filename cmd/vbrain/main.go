@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/virtual360-io/vbrain/internal/git"
 	"github.com/virtual360-io/vbrain/internal/index"
 	"github.com/virtual360-io/vbrain/internal/ingest"
+	"github.com/virtual360-io/vbrain/internal/maint"
 	"github.com/virtual360-io/vbrain/internal/paths"
 	"github.com/virtual360-io/vbrain/internal/realtime"
 	"github.com/virtual360-io/vbrain/internal/resolvelinks"
@@ -46,6 +48,20 @@ func main() {
 		err = cmdRoutines(os.Args[2:])
 	case "realtime":
 		err = cmdRealtime(os.Args[2:])
+	case "tags":
+		err = cmdTags(os.Args[2:])
+	case "stats":
+		err = cmdStats(os.Args[2:])
+	case "query-log":
+		err = cmdQueryLog(os.Args[2:])
+	case "linkify":
+		err = cmdLinkify(os.Args[2:])
+	case "routine-add":
+		err = cmdRoutineAdd(os.Args[2:])
+	case "routine-list":
+		err = cmdRoutineList(os.Args[2:])
+	case "seed-routines":
+		err = cmdSeedRoutines(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "subcomando desconhecido: %q\n", os.Args[1])
 		os.Exit(2)
@@ -483,6 +499,171 @@ func parseRealtimeItems(raw []byte, key string) ([]map[string]string, error) {
 		out = append(out, sm)
 	}
 	return out, nil
+}
+
+func withDB(fn func(*sql.DB) error) error {
+	if err := paths.EnsureDirs(); err != nil {
+		return err
+	}
+	d, err := db.Open(paths.DBPath())
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return fn(d)
+}
+
+func cmdTags(args []string) error {
+	fs := flag.NewFlagSet("tags", flag.ContinueOnError)
+	limit := fs.Int("limit", 0, "máximo de tags (0 = todas)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return withDB(func(d *sql.DB) error {
+		res, err := maint.Tags(d, *limit)
+		if err != nil {
+			return err
+		}
+		return emitJSON(res)
+	})
+}
+
+func cmdStats(args []string) error {
+	return withDB(func(d *sql.DB) error {
+		res, err := maint.Stats(d, paths.DataHome())
+		if err != nil {
+			return err
+		}
+		return emitJSON(res)
+	})
+}
+
+func cmdQueryLog(args []string) error {
+	fs := flag.NewFlagSet("query-log", flag.ContinueOnError)
+	dump := fs.Bool("dump", false, "lista as entradas")
+	prune := fs.Bool("prune", false, "apaga entradas com id <= through-id")
+	limit := fs.Int("limit", 0, "limite no dump")
+	throughID := fs.Int64("through-id", 0, "prune até este id (inclusive)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return withDB(func(d *sql.DB) error {
+		switch {
+		case *dump:
+			res, err := maint.QueryLogDump(d, *limit)
+			if err != nil {
+				return err
+			}
+			return emitJSON(res)
+		case *prune:
+			if *throughID == 0 {
+				return fmt.Errorf("--prune requer --through-id K")
+			}
+			res, err := maint.QueryLogPrune(d, *throughID)
+			if err != nil {
+				return err
+			}
+			return emitJSON(res)
+		default:
+			return fmt.Errorf("uso: vbrain query-log (--dump [--limit N] | --prune --through-id K)")
+		}
+	})
+}
+
+func cmdLinkify(args []string) error {
+	if err := paths.EnsureDirs(); err != nil {
+		return err
+	}
+	res, err := maint.Linkify(paths.WikiDir())
+	if err != nil {
+		return err
+	}
+	return emitJSON(res)
+}
+
+func cmdRoutineAdd(args []string) error {
+	fs := flag.NewFlagSet("routine-add", flag.ContinueOnError)
+	slug := fs.String("slug", "", "slug da rotina")
+	description := fs.String("description", "", "descrição")
+	schedule := fs.String("schedule", "", "cron de 5 campos (opcional)")
+	prompt := fs.String("prompt", "", "prompt da rotina")
+	promptFile := fs.String("prompt-file", "", "arquivo com o prompt")
+	disabled := fs.Bool("disabled", false, "cria desabilitada")
+	replace := fs.Bool("replace", false, "substitui se já existe")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*slug) == "" {
+		return fmt.Errorf("--slug é obrigatório")
+	}
+	p := *prompt
+	if p == "" && *promptFile != "" {
+		b, err := os.ReadFile(*promptFile)
+		if err != nil {
+			return err
+		}
+		p = string(b)
+	}
+	if strings.TrimSpace(p) == "" {
+		return fmt.Errorf("--prompt ou --prompt-file obrigatório")
+	}
+	var sched *string
+	if *schedule != "" {
+		sched = schedule
+	}
+	entry, err := routines.Add(*slug, *description, p, sched, !*disabled, *replace, time.Now())
+	if err != nil {
+		return err
+	}
+	all, _ := routines.LoadAll()
+	return emitJSON(map[string]any{
+		"config_path": routines.ConfigPath(), "routine": entry, "total": len(all),
+	})
+}
+
+func cmdRoutineList(args []string) error {
+	fs := flag.NewFlagSet("routine-list", flag.ContinueOnError)
+	slug := fs.String("slug", "", "filtra por slug")
+	enabledOnly := fs.Bool("enabled-only", false, "só habilitadas")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	var list []routines.Routine
+	var err error
+	switch {
+	case *slug != "":
+		r, e := routines.Find(*slug)
+		err = e
+		if r != nil {
+			list = []routines.Routine{*r}
+		}
+	case *enabledOnly:
+		list, err = routines.Enabled()
+	default:
+		list, err = routines.LoadAll()
+	}
+	if err != nil {
+		return err
+	}
+	return emitJSON(map[string]any{
+		"config_path": routines.ConfigPath(), "count": len(list), "routines": list,
+	})
+}
+
+func cmdSeedRoutines(args []string) error {
+	fs := flag.NewFlagSet("seed-routines", flag.ContinueOnError)
+	dryRun := fs.Bool("dry-run", false, "não escreve, só reporta")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	res, err := routines.SeedDefaults(*dryRun, time.Now())
+	if err != nil {
+		return err
+	}
+	return emitJSON(map[string]any{
+		"config_path": routines.ConfigPath(),
+		"seeded":      res.Seeded, "skipped": res.Skipped, "dry_run": *dryRun,
+	})
 }
 
 func emitJSON(v any) error {
