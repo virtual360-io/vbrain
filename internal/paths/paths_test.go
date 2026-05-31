@@ -18,7 +18,7 @@ func TestDataHomeDefaultsToHomeVbrainWhenEnvBlankAndNotInBase(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	want := filepath.Join(home, "vbrain")
 
-	// cwd num dir sem wiki/ → não é base → cai no ~/vbrain.
+	// cwd in a dir without wiki/ → not a base → falls back to ~/vbrain.
 	t.Chdir(t.TempDir())
 	t.Setenv("VBRAIN_HOME", "")
 	if got := DataHome(); got != want {
@@ -27,8 +27,8 @@ func TestDataHomeDefaultsToHomeVbrainWhenEnvBlankAndNotInBase(t *testing.T) {
 }
 
 func TestDataHomeUsesLocalBaseWhenEnvBlankAndRunningInBase(t *testing.T) {
-	// cwd é uma base (tem wiki/) → usa-o, mesmo sem VBRAIN_HOME (conserta o
-	// cloud onde o checkout é a base).
+	// cwd is a base (has wiki/) → use it, even without VBRAIN_HOME (fixes the
+	// cloud where the checkout is the base).
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "wiki"), 0o755); err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestEnsureDirsCreatesFlatStructure(t *testing.T) {
 	}
 	for _, sub := range []string{"raw", "wiki", "db", filepath.Join("raw", ".tmp"), filepath.Join("wiki", RealtimeDir)} {
 		if fi, err := os.Stat(filepath.Join(dir, sub)); err != nil || !fi.IsDir() {
-			t.Errorf("esperava diretório %q criado", sub)
+			t.Errorf("expected directory %q created", sub)
 		}
 	}
 }
@@ -81,7 +81,7 @@ func TestEnsureDirsDoesNotCreateTypeFolders(t *testing.T) {
 	}
 	for _, old := range []string{"concepts", "decisions", "gotchas", "notes", "_rules"} {
 		if _, err := os.Stat(filepath.Join(dir, "wiki", old)); !os.IsNotExist(err) {
-			t.Errorf("pasta de tipo %q não deve mais ser criada (layout plano)", old)
+			t.Errorf("type folder %q should no longer be created (flat layout)", old)
 		}
 	}
 }
@@ -89,7 +89,7 @@ func TestEnsureDirsDoesNotCreateTypeFolders(t *testing.T) {
 func TestKindsIncludeAllSupportedMetadata(t *testing.T) {
 	for _, k := range []string{"concept", "decision", "gotcha", "note", "rule", "realtime"} {
 		if !slices.Contains(Kinds, k) {
-			t.Errorf("Kinds deveria conter %q", k)
+			t.Errorf("Kinds should contain %q", k)
 		}
 	}
 }

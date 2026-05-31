@@ -18,7 +18,7 @@ func isolate(t *testing.T) {
 
 func sp(s string) *string { return &s }
 
-// add é um wrapper enxuto pros testes.
+// add is a thin wrapper for the tests.
 func add(t *testing.T, slug, desc, prompt string, schedule *string, enabled bool) (routines.Routine, error) {
 	t.Helper()
 	return routines.Add(slug, desc, prompt, schedule, enabled, false, fixedNow)
@@ -74,10 +74,10 @@ func TestAddAllowsNilSchedule(t *testing.T) {
 func TestAddRejectsInvalidCron(t *testing.T) {
 	isolate(t)
 	if _, err := add(t, "x", "", "p", sp("every hour"), true); err == nil {
-		t.Error("'every hour' deveria falhar")
+		t.Error("'every hour' should fail")
 	}
 	if _, err := add(t, "y", "", "p", sp("0 6 * *"), true); err == nil {
-		t.Error("'0 6 * *' (4 campos) deveria falhar")
+		t.Error("'0 6 * *' (4 fields) should fail")
 	}
 }
 
@@ -95,10 +95,10 @@ func TestAddNormalizesSlug(t *testing.T) {
 func TestAddRejectsEmptySlugAndPrompt(t *testing.T) {
 	isolate(t)
 	if _, err := add(t, "", "", "x", nil, true); err == nil {
-		t.Error("slug vazio deveria falhar")
+		t.Error("empty slug should fail")
 	}
 	if _, err := add(t, "valid", "", "", nil, true); err == nil {
-		t.Error("prompt vazio deveria falhar")
+		t.Error("empty prompt should fail")
 	}
 }
 
@@ -106,7 +106,7 @@ func TestAddCollisionRaisesWithoutReplace(t *testing.T) {
 	isolate(t)
 	add(t, "x", "", "first", nil, true)
 	if _, err := add(t, "x", "", "second", nil, true); err == nil {
-		t.Fatal("colisão deveria falhar sem replace")
+		t.Fatal("collision should fail without replace")
 	}
 }
 
@@ -143,10 +143,10 @@ func TestRemove(t *testing.T) {
 	isolate(t)
 	add(t, "x", "", "p", nil, true)
 	if ok, _ := routines.Remove("x"); !ok {
-		t.Error("remove deveria retornar true")
+		t.Error("remove should return true")
 	}
 	if ok, _ := routines.Remove("x"); ok {
-		t.Error("segundo remove deveria retornar false")
+		t.Error("second remove should return false")
 	}
 }
 
@@ -156,7 +156,7 @@ func TestLoadAllTreatsMissingEnabledAsTrue(t *testing.T) {
 	os.WriteFile(routines.ConfigPath(), []byte("routines:\n  - slug: x\n    description: \"\"\n    prompt: p\n"), 0o644)
 	r, _ := routines.Find("x")
 	if r == nil || !r.Enabled {
-		t.Fatalf("enabled ausente deveria virar true: %+v", r)
+		t.Fatalf("missing enabled should become true: %+v", r)
 	}
 }
 
@@ -164,7 +164,7 @@ func TestComputeNextRunIsDeterministic(t *testing.T) {
 	n1, _ := routines.ComputeNextRun("0 6 * * *", fixedNow)
 	n2, _ := routines.ComputeNextRun("0 6 * * *", fixedNow)
 	if !n1.Equal(n2) {
-		t.Fatal("não determinístico")
+		t.Fatal("not deterministic")
 	}
 	if got := n1.Format(time.RFC3339); got != "2026-05-29T06:00:00Z" {
 		t.Fatalf("got %q", got)
@@ -220,12 +220,12 @@ func TestClaimDueExposesPreviousLastRun(t *testing.T) {
 	first := fixedNow.Add(time.Hour)
 	d1, _ := routines.ClaimDue(first)
 	if len(d1) != 1 || d1[0].LastRun != nil {
-		t.Fatalf("primeiro claim deveria expor last_run nil: %+v", d1)
+		t.Fatalf("first claim should expose last_run nil: %+v", d1)
 	}
 	second := first.Add(time.Hour)
 	d2, _ := routines.ClaimDue(second)
 	if len(d2) != 1 || d2[0].LastRun == nil || *d2[0].LastRun != first.Format(time.RFC3339) {
-		t.Fatalf("segundo claim deveria expor last_run anterior: %+v", d2)
+		t.Fatalf("second claim should expose the previous last_run: %+v", d2)
 	}
 }
 
@@ -265,7 +265,7 @@ func TestClaimDueBackfillsNextRunWhenMissing(t *testing.T) {
 
 	due, _ := routines.ClaimDue(fixedNow)
 	if len(due) != 0 {
-		t.Fatalf("não deveria estar due (next_time é estritamente após now): %+v", due)
+		t.Fatalf("should not be due (next_time is strictly after now): %+v", due)
 	}
 	r, _ := routines.Find("x")
 	if r.NextRun == nil || *r.NextRun != "2026-05-28T13:00:00Z" {

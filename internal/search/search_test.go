@@ -65,7 +65,7 @@ func TestQueryEmptyNormalizedReturnsEmptyButLogs(t *testing.T) {
 	var n int
 	d.QueryRow("SELECT COUNT(*) FROM query_log").Scan(&n)
 	if n != 1 {
-		t.Fatalf("query_log = %d, want 1 (queries vazias são o sinal mais valioso)", n)
+		t.Fatalf("query_log = %d, want 1 (empty queries are the most valuable signal)", n)
 	}
 }
 

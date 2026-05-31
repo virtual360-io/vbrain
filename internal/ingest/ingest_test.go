@@ -42,7 +42,7 @@ func TestIngestTextFile(t *testing.T) {
 		t.Errorf("extracted = %q", b)
 	}
 	if _, err := os.Stat(res.RawPath); err != nil {
-		t.Errorf("raw não existe: %v", err)
+		t.Errorf("raw doesn't exist: %v", err)
 	}
 }
 
@@ -60,7 +60,7 @@ func TestIngestDeduplicatesBySha(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !second.Duplicate || second.RawID != first.RawID {
-		t.Fatalf("segundo ingest deveria ser duplicata do primeiro: %+v / %+v", first, second)
+		t.Fatalf("second ingest should be a duplicate of the first: %+v / %+v", first, second)
 	}
 }
 
@@ -115,6 +115,6 @@ func TestIngestTweetWithStubbedSyndication(t *testing.T) {
 	}
 	b, _ := os.ReadFile(res.ExtractedPath)
 	if len(b) == 0 {
-		t.Error("markdown extraído vazio")
+		t.Error("extracted markdown empty")
 	}
 }

@@ -19,31 +19,31 @@ func writeTmp(t *testing.T, name string, data []byte) string {
 
 func TestTextDetectMdFile(t *testing.T) {
 	if !(sources.Text{}).Detect(writeTmp(t, "foo.md", []byte("# hi\n"))) {
-		t.Fatal("deveria detectar .md")
+		t.Fatal("should detect .md")
 	}
 }
 
 func TestTextDetectTxtFile(t *testing.T) {
 	if !(sources.Text{}).Detect(writeTmp(t, "foo.txt", []byte("hello\n"))) {
-		t.Fatal("deveria detectar .txt")
+		t.Fatal("should detect .txt")
 	}
 }
 
 func TestTextDetectExtensionlessUtf8(t *testing.T) {
 	if !(sources.Text{}).Detect(writeTmp(t, "notes", []byte("some text\n"))) {
-		t.Fatal("deveria detectar texto utf8 sem extensão")
+		t.Fatal("should detect extensionless utf8 text")
 	}
 }
 
 func TestTextDetectRejectsBinary(t *testing.T) {
 	if (sources.Text{}).Detect(writeTmp(t, "blob.bin", []byte("PK\x03\x04binarystuff\x00\xff\xfe"))) {
-		t.Fatal("não deveria detectar binário")
+		t.Fatal("should not detect a binary")
 	}
 }
 
 func TestTextDetectRejectsDirectory(t *testing.T) {
 	if (sources.Text{}).Detect(t.TempDir()) {
-		t.Fatal("não deveria detectar diretório")
+		t.Fatal("should not detect a directory")
 	}
 }
 
@@ -64,7 +64,7 @@ func TestTextExtractWritesPassthrough(t *testing.T) {
 
 func TestTextKindKey(t *testing.T) {
 	if (sources.Text{}).KindKey() != "text" {
-		t.Fatal("kind_key deveria ser text")
+		t.Fatal("kind_key should be text")
 	}
 }
 
@@ -98,6 +98,6 @@ func TestDispatcherKindsIncludesText(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("Kinds() deveria incluir text")
+		t.Fatal("Kinds() should include text")
 	}
 }

@@ -43,11 +43,11 @@ func TestUpdateReplacesBinaryOnMatchingSha(t *testing.T) {
 	}
 	got, _ := os.ReadFile(target)
 	if string(got) != string(newBin) {
-		t.Fatalf("binário não substituído: %q", got)
+		t.Fatalf("binary not replaced: %q", got)
 	}
-	// permissão de execução preservada
+	// execute permission preserved
 	if fi, _ := os.Stat(target); fi.Mode().Perm()&0o100 == 0 {
-		t.Error("binário deveria ser executável")
+		t.Error("binary should be executable")
 	}
 }
 
@@ -59,11 +59,11 @@ func TestUpdateRejectsShaMismatch(t *testing.T) {
 	base := serve(t, []byte("nova"), "deadbeef  "+AssetName()+"\n")
 
 	if _, err := update(target, base, http.DefaultClient); err == nil {
-		t.Fatal("deveria recusar sha que não confere")
+		t.Fatal("should reject a sha that doesn't match")
 	}
-	// não substituiu
+	// didn't replace
 	if got, _ := os.ReadFile(target); string(got) != "antiga" {
-		t.Errorf("binário não deveria ter mudado: %q", got)
+		t.Errorf("binary should not have changed: %q", got)
 	}
 }
 
@@ -73,6 +73,6 @@ func TestUpdateErrsWhenAssetMissingFromSums(t *testing.T) {
 	base := serve(t, []byte("nova"), "abc123  vbrain-outra-plataforma\n")
 
 	if _, err := update(target, base, http.DefaultClient); err == nil {
-		t.Fatal("deveria errar quando o asset não está no SHA256SUMS")
+		t.Fatal("should error when the asset isn't in SHA256SUMS")
 	}
 }

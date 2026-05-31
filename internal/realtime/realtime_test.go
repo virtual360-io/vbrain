@@ -57,21 +57,21 @@ func TestGcalendarRejectsEmptyAndBlankID(t *testing.T) {
 	isolate(t)
 	gc := realtime.Gcalendar{}
 	if _, err := gc.SaveConfig(nil); err == nil {
-		t.Error("lista vazia deveria falhar")
+		t.Error("empty list should fail")
 	}
 	saved, err := gc.SaveConfig(append(calendars, map[string]string{"id": "", "summary": "Blank"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(saved) != 2 {
-		t.Errorf("blank id deveria ser descartado: %+v", saved)
+		t.Errorf("blank id should be discarded: %+v", saved)
 	}
 }
 
 func TestGcalendarBodyFormat(t *testing.T) {
 	collapsed := realtime.Gcalendar{}.Body([]realtime.Item{{"id": "victor@v360.io", "summary": "victor@v360.io"}})
 	if !strings.Contains(collapsed, "`victor@v360.io`") || strings.Contains(collapsed, "victor@v360.io (`victor@v360.io`)") {
-		t.Errorf("summary==id deveria colapsar: %s", firstBullet(collapsed))
+		t.Errorf("summary==id should collapse: %s", firstBullet(collapsed))
 	}
 	distinct := realtime.Gcalendar{}.Body([]realtime.Item{{"id": "primary", "summary": "Victor"}})
 	if !strings.Contains(distinct, "Victor (`primary`)") {
@@ -79,7 +79,7 @@ func TestGcalendarBodyFormat(t *testing.T) {
 	}
 	blank := realtime.Gcalendar{}.Body([]realtime.Item{{"id": "abc", "summary": ""}})
 	if !strings.Contains(blank, "`abc`") {
-		t.Errorf("summary vazio cai pro id: %s", firstBullet(blank))
+		t.Errorf("empty summary falls back to id: %s", firstBullet(blank))
 	}
 }
 
@@ -117,15 +117,15 @@ func TestSlackGlobalAndFilteredBody(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !s.Global(saved) {
-		t.Error("lista vazia deveria ser global")
+		t.Error("empty list should be global")
 	}
 	if !strings.Contains(s.Body(saved), "global") {
-		t.Error("body global deveria mencionar busca global")
+		t.Error("global body should mention a global search")
 	}
 
 	chans := []realtime.Item{{"id": "C123", "name": "geral"}}
 	if s.Global(chans) {
-		t.Error("com canal não deveria ser global")
+		t.Error("with a channel it should not be global")
 	}
 	if !strings.Contains(s.Body(chans), "#geral (`C123`)") {
 		t.Errorf("body filtrado: %s", firstBullet(s.Body(chans)))
@@ -141,7 +141,7 @@ func TestSlackChannelFilter(t *testing.T) {
 		t.Errorf("name = %q", got)
 	}
 	if got := s.ChannelFilter(realtime.Item{}); got != "" {
-		t.Errorf("vazio = %q", got)
+		t.Errorf("empty = %q", got)
 	}
 }
 

@@ -62,18 +62,18 @@ func TestMigrateCreatesTablesAndTriggers(t *testing.T) {
 	tables := names(t, d, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
 	for _, want := range []string{"pages", "raw_sources", "links"} {
 		if !contains(tables, want) {
-			t.Errorf("tabela %q ausente", want)
+			t.Errorf("table %q missing", want)
 		}
 	}
 
 	if got := names(t, d, "SELECT name FROM sqlite_master WHERE name='pages_fts'"); len(got) != 1 {
-		t.Error("tabela virtual pages_fts deveria existir")
+		t.Error("virtual table pages_fts should exist")
 	}
 
 	triggers := names(t, d, "SELECT name FROM sqlite_master WHERE type='trigger' ORDER BY name")
 	for _, want := range []string{"pages_ai", "pages_ad", "pages_au"} {
 		if !contains(triggers, want) {
-			t.Errorf("trigger %q ausente", want)
+			t.Errorf("trigger %q missing", want)
 		}
 	}
 }
@@ -108,24 +108,24 @@ func TestFTSTriggerSyncsOnInsertUpdateDelete(t *testing.T) {
 	id, _ := res.LastInsertId()
 
 	if got := matchCount(t, d, "foobar"); got != 1 {
-		t.Errorf("após insert: foobar = %d, want 1", got)
+		t.Errorf("after insert: foobar = %d, want 1", got)
 	}
 
 	if _, err := d.Exec("UPDATE pages SET body = ? WHERE id = ?", "renamed body about widgets", id); err != nil {
 		t.Fatal(err)
 	}
 	if got := matchCount(t, d, "widgets"); got != 1 {
-		t.Errorf("após update: widgets = %d, want 1", got)
+		t.Errorf("after update: widgets = %d, want 1", got)
 	}
 	if got := matchCount(t, d, "foobar"); got != 0 {
-		t.Errorf("após update: foobar = %d, want 0", got)
+		t.Errorf("after update: foobar = %d, want 0", got)
 	}
 
 	if _, err := d.Exec("DELETE FROM pages WHERE id = ?", id); err != nil {
 		t.Fatal(err)
 	}
 	if got := matchCount(t, d, "widgets"); got != 0 {
-		t.Errorf("após delete: widgets = %d, want 0", got)
+		t.Errorf("after delete: widgets = %d, want 0", got)
 	}
 }
 
@@ -136,7 +136,7 @@ func TestCheckConstraintRejectsUnknownKind(t *testing.T) {
 		"x/y.md", "T", "B", "garbage", "sha",
 	)
 	if err == nil {
-		t.Fatal("kind inválido deveria violar o CHECK")
+		t.Fatal("invalid kind should violate the CHECK")
 	}
 }
 
@@ -147,7 +147,7 @@ func TestCheckConstraintAcceptsRealtimeKind(t *testing.T) {
 		"_realtime/gcalendar.md", "GCal", "body", "realtime", "sha",
 	)
 	if err != nil {
-		t.Fatalf("kind realtime deveria ser aceito: %v", err)
+		t.Fatalf("realtime kind should be accepted: %v", err)
 	}
 }
 
@@ -170,7 +170,7 @@ func TestLinkCascadesWhenSourcePageDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n != 0 {
-		t.Errorf("edge deve sumir junto com a página de origem (CASCADE): n = %d", n)
+		t.Errorf("edge should disappear with the source page (CASCADE): n = %d", n)
 	}
 }
 
@@ -194,10 +194,10 @@ func TestLinkTargetNulledWhenTargetPageDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	if gotFrom != fromID {
-		t.Errorf("aresta deve permanecer: from = %d, want %d", gotFrom, fromID)
+		t.Errorf("edge should remain: from = %d, want %d", gotFrom, fromID)
 	}
 	if gotTo.Valid {
-		t.Errorf("alvo deletado deve virar NULL (SET NULL), got %v", gotTo)
+		t.Errorf("deleted target should become NULL (SET NULL), got %v", gotTo)
 	}
 }
 
@@ -233,7 +233,7 @@ CREATE TABLE pages (
 		t.Fatal(err)
 	}
 	if !strings.Contains(ddl, "'realtime'") {
-		t.Errorf("schema de pages deveria ter sido reconstruído com 'realtime': %s", ddl)
+		t.Errorf("pages schema should have been rebuilt with 'realtime': %s", ddl)
 	}
 }
 

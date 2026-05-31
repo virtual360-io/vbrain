@@ -32,11 +32,11 @@ func TestDoesNotClobberExistingClaudeMD(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("# custom\n"), 0o644)
 	ok, err := scaffold.WriteClaudeMD(dir)
 	if err != nil || ok {
-		t.Fatalf("não deveria sobrescrever: ok=%v", ok)
+		t.Fatalf("should not overwrite: ok=%v", ok)
 	}
 	body, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
 	if string(body) != "# custom\n" {
-		t.Errorf("clobberou: %q", body)
+		t.Errorf("clobbered: %q", body)
 	}
 }
 
@@ -51,7 +51,7 @@ func TestInstallsSkillsIntoClaudeSkills(t *testing.T) {
 		t.Fatalf("n=%d err=%v", n, err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "vbrain-foo", "SKILL.md")); err != nil {
-		t.Errorf("skill não instalada: %v", err)
+		t.Errorf("skill not installed: %v", err)
 	}
 }
 
@@ -67,6 +67,6 @@ func TestInstallSkillsIdempotentDoesNotNest(t *testing.T) {
 		t.Fatalf("n=%d err=%v", n, err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "vbrain-foo", "vbrain-foo")); !os.IsNotExist(err) {
-		t.Error("não deveria aninhar vbrain-foo/vbrain-foo")
+		t.Error("should not nest vbrain-foo/vbrain-foo")
 	}
 }

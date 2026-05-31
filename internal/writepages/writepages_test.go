@@ -120,7 +120,7 @@ func TestUpdateMergesFrontmatter(t *testing.T) {
 	}
 	p := e.parse(t, "foo.md")
 	if p.Frontmatter["title"] != "Foo" || p.Frontmatter["kind"] != "concept" {
-		t.Errorf("identidade não preservada: %+v", p.Frontmatter)
+		t.Errorf("identity not preserved: %+v", p.Frontmatter)
 	}
 	tags := toStr(p.Frontmatter["tags"])
 	if !reflect.DeepEqual(tags, []string{"a", "b"}) {
@@ -145,7 +145,7 @@ func TestUpdateFallsBackToCreateWhenTargetMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// fallback: vira create (Regra 12 — não persiste update fantasma).
+	// fallback: becomes create (Rule 12 — don't persist a phantom update).
 	if !reflect.DeepEqual(res.Written, []string{"nova-pagina.md"}) || len(res.Updated) != 0 {
 		t.Fatalf("res = %+v", res)
 	}
@@ -153,7 +153,7 @@ func TestUpdateFallsBackToCreateWhenTargetMissing(t *testing.T) {
 
 func TestDeleteRemovesPage(t *testing.T) {
 	e := setup(t)
-	e.livePage(t, "bar.md", "---\ntitle: Bar\nkind: note\n---\nsem raw\n") // sem source_raw → não orfana
+	e.livePage(t, "bar.md", "---\ntitle: Bar\nkind: note\n---\nno raw\n") // no source_raw → doesn't orphan
 	id, _ := e.insertRaw(t, "d.txt", "sha5")
 
 	res, err := wp.WritePages(e.db, id, []wp.PageInput{
@@ -166,13 +166,13 @@ func TestDeleteRemovesPage(t *testing.T) {
 		t.Fatalf("deleted = %v", res.Deleted)
 	}
 	if fileExists(filepath.Join(e.wikiDir, "bar.md")) {
-		t.Error("bar.md deveria ter sido removida")
+		t.Error("bar.md should have been removed")
 	}
 }
 
 func TestOrphanGuardrailAbortsAndLeavesWikiIntact(t *testing.T) {
 	e := setup(t)
-	// foo.md é a única página citando raw/keep.txt; deletá-la orfanaria o raw.
+	// foo.md is the only page citing raw/keep.txt; deleting it would orphan the raw.
 	e.livePage(t, "foo.md", "---\ntitle: Foo\nkind: note\nsource_raw: raw/keep.txt\n---\nx\n")
 	id, _ := e.insertRaw(t, "d.txt", "sha6")
 
@@ -183,13 +183,13 @@ func TestOrphanGuardrailAbortsAndLeavesWikiIntact(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !res.NeedsReview || res.Committed == nil || *res.Committed {
-		t.Fatalf("deveria abortar com needs_review: %+v", res)
+		t.Fatalf("should abort with needs_review: %+v", res)
 	}
 	if !reflect.DeepEqual(res.OrphanedRaws, []string{"raw/keep.txt"}) {
 		t.Errorf("orphaned = %v", res.OrphanedRaws)
 	}
 	if !fileExists(filepath.Join(e.wikiDir, "foo.md")) {
-		t.Error("wiki deveria ficar intacta após abortar")
+		t.Error("wiki should stay intact after aborting")
 	}
 }
 

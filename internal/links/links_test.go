@@ -62,7 +62,7 @@ func TestIgnoresExternalAndNonMdMarkdownLinks(t *testing.T) {
 func TestEmptyAndNil(t *testing.T) {
 	for _, in := range []string{"sem link [x] (y)", "", "[[]] e [[   ]]"} {
 		if got := Extract(in); len(got) != 0 {
-			t.Errorf("Extract(%q) = %v, want vazio", in, got)
+			t.Errorf("Extract(%q) = %v, want empty", in, got)
 		}
 	}
 }
@@ -93,7 +93,7 @@ func TestLinkifyIsIdempotent(t *testing.T) {
 	once := Linkify(body, []string{"familia-de-victor"})
 	twice := Linkify(once, []string{"familia-de-victor"})
 	if once != twice {
-		t.Fatalf("não idempotente: %q != %q", once, twice)
+		t.Fatalf("not idempotent: %q != %q", once, twice)
 	}
 }
 
@@ -119,7 +119,7 @@ func TestApplyResolutionAliasUsesDisplay(t *testing.T) {
 
 func TestApplyResolutionLeavesNullOrAbsentUntouched(t *testing.T) {
 	body := "[[UFRJ]] e [[Outra]]"
-	// slug "" (LLM não achou) e título ausente do mapa ficam intactos.
+	// slug "" (LLM found nothing) and a title absent from the map stay intact.
 	if out := ApplyResolution(body, map[string]string{"UFRJ": ""}); out != body {
 		t.Fatalf("got %q", out)
 	}

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// forceGoGit força o seletor a usar o backend go-git, restaurando ao fim.
+// forceGoGit forces the selector to use the go-git backend, restoring at the end.
 func forceGoGit(t *testing.T) {
 	t.Helper()
 	orig := systemGitAvailable
@@ -25,7 +25,7 @@ func TestGoGitBackendInitCommitFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !RepoInitialized(dir) || CurrentBranch(dir) != "main" {
-		t.Fatalf("init falhou: initialized=%v branch=%q", RepoInitialized(dir), CurrentBranch(dir))
+		t.Fatalf("init failed: initialized=%v branch=%q", RepoInitialized(dir), CurrentBranch(dir))
 	}
 
 	// no-op quando limpo

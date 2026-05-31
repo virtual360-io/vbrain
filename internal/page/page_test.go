@@ -19,14 +19,14 @@ func TestRewriteBodyPreservesFrontmatterVerbatim(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !changed {
-		t.Fatal("deveria ter reescrito")
+		t.Fatal("should have rewritten")
 	}
 	content := readFile(t, path)
 	if !strings.Contains(content, "---\ntitle: Foo\nkind: note\ntags:\n  - a\n---\n") {
-		t.Errorf("frontmatter não preservado verbatim:\n%s", content)
+		t.Errorf("frontmatter not preserved verbatim:\n%s", content)
 	}
 	if !strings.Contains(content, "link [Alvo](alvo.md) aqui") {
-		t.Errorf("corpo não reescrito:\n%s", content)
+		t.Errorf("body not rewritten:\n%s", content)
 	}
 }
 
@@ -40,7 +40,7 @@ func TestRewriteBodyReturnsFalseWhenUnchanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	if changed {
-		t.Fatal("não deveria reescrever corpo inalterado")
+		t.Fatal("should not rewrite an unchanged body")
 	}
 }
 
@@ -61,7 +61,7 @@ func TestParseStringWithFrontmatter(t *testing.T) {
 		t.Errorf("body = %q", parsed.Body)
 	}
 	if parsed.SHA256 == "" {
-		t.Error("sha256 vazio")
+		t.Error("empty sha256")
 	}
 }
 
@@ -72,7 +72,7 @@ func TestParseStringWithoutFrontmatter(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(parsed.Frontmatter) != 0 {
-		t.Errorf("frontmatter deveria estar vazio: %v", parsed.Frontmatter)
+		t.Errorf("frontmatter should be empty: %v", parsed.Frontmatter)
 	}
 	if parsed.Body != content {
 		t.Errorf("body = %q", parsed.Body)
@@ -88,13 +88,13 @@ func TestWriteCreatesFileAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(path); err != nil {
-		t.Errorf("arquivo não existe: %v", err)
+		t.Errorf("file doesn't exist: %v", err)
 	}
 	if want := filepath.Join(dir, "foo-page.md"); path != want {
 		t.Errorf("path = %q, want %q", path, want)
 	}
 	if leftovers, _ := filepath.Glob(filepath.Join(dir, "*.tmp.*")); len(leftovers) != 0 {
-		t.Errorf("sobraram tmp files: %v", leftovers)
+		t.Errorf("leftover tmp files: %v", leftovers)
 	}
 }
 
@@ -114,17 +114,17 @@ func TestWriteThenParseRoundtripKeepsSHA256Stable(t *testing.T) {
 		t.Errorf("title = %v", parsed.Frontmatter["title"])
 	}
 	if parsed.Body != body {
-		t.Errorf("body roundtrip falhou:\n%q\n!=\n%q", parsed.Body, body)
+		t.Errorf("body roundtrip failed:\n%q\n!=\n%q", parsed.Body, body)
 	}
 	if parsed.SHA256 != sha256hex(body) {
-		t.Errorf("sha256 instável")
+		t.Errorf("unstable sha256")
 	}
 }
 
 func TestWriteRaisesOnEmptySlug(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := Write(dir, "", map[string]any{}, "x"); err == nil {
-		t.Fatal("slug vazio deveria falhar")
+		t.Fatal("empty slug should fail")
 	}
 }
 

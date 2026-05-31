@@ -46,8 +46,9 @@ func TestSingleTokenNoOr(t *testing.T) {
 }
 
 func TestDropsStopwordsKeepingContentTerms(t *testing.T) {
-	// stopwords (quais/eu/já/tive) inflavam o OR e afogavam o sinal no BM25 —
-	// causa raiz do bug de "não acha empregos".
+	// stopwords (quais/eu/já/tive) inflated the OR and drowned the signal in
+	// BM25 — root cause of the "doesn't find jobs" bug. (PT query kept on
+	// purpose: this test verifies Portuguese stopword handling.)
 	if got := ftsquery.Normalize("quais empregos eu já tive", false); got != `"empregos"` {
 		t.Fatalf("got %q", got)
 	}
@@ -70,14 +71,14 @@ func TestKeepsMultipleContentTerms(t *testing.T) {
 }
 
 func TestFallsBackToOriginalWhenAllStopwords(t *testing.T) {
-	// Só stopwords: melhor buscar com elas do que devolver vazio (zero hits).
+	// Only stopwords: better to search with them than return empty (zero hits).
 	if got := ftsquery.Normalize("quem é você", false); got == "" {
-		t.Fatal("não deveria devolver vazio quando só há stopwords")
+		t.Fatal("should not return empty when there are only stopwords")
 	}
 }
 
-// Testes de integração: a query normalizada precisa rodar no FTS5 real sem
-// erro de sintaxe (trailing dash, dois pontos etc.).
+// Integration tests: the normalized query must run on real FTS5 without a
+// syntax error (trailing dash, colon, etc.).
 
 func TestHandlesTrailingDashWithoutFTSError(t *testing.T) {
 	d, err := db.Open(":memory:")
@@ -94,10 +95,10 @@ func TestHandlesTrailingDashWithoutFTSError(t *testing.T) {
 
 	normalized := ftsquery.Normalize("marker-", false)
 	if normalized == "" {
-		t.Fatal("normalized vazio")
+		t.Fatal("normalized empty")
 	}
 	if _, err := d.Query("SELECT title FROM pages_fts WHERE pages_fts MATCH ?", normalized); err != nil {
-		t.Fatalf("MATCH %q falhou: %v", normalized, err)
+		t.Fatalf("MATCH %q failed: %v", normalized, err)
 	}
 }
 
@@ -116,13 +117,13 @@ func TestActuallyQueriesFTSWithoutError(t *testing.T) {
 
 	normalized := ftsquery.Normalize("postgres:logical", false)
 	if normalized == "" {
-		t.Fatal("normalized vazio")
+		t.Fatal("normalized empty")
 	}
 	var n int
 	if err := d.QueryRow(
 		"SELECT COUNT(*) FROM pages_fts WHERE pages_fts MATCH ?", normalized,
 	).Scan(&n); err != nil {
-		t.Fatalf("MATCH %q falhou: %v", normalized, err)
+		t.Fatalf("MATCH %q failed: %v", normalized, err)
 	}
 	if n != 1 {
 		t.Fatalf("hits = %d, want 1", n)

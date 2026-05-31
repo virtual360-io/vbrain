@@ -20,7 +20,7 @@ func gitLog(t *testing.T, dir string) string {
 
 func TestRepoInitializedFalseInEmptyDir(t *testing.T) {
 	if git.RepoInitialized(t.TempDir()) {
-		t.Fatal("dir vazio não deveria ser repo")
+		t.Fatal("empty dir should not be a repo")
 	}
 }
 
@@ -30,23 +30,23 @@ func TestInitCreatesRepoWithGitignoreAndInitialCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !git.RepoInitialized(dir) {
-		t.Fatal("deveria estar inicializado")
+		t.Fatal("should be initialized")
 	}
 	gi, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(gi), "/db/") {
-		t.Error("/db/ NÃO deve ser ignorado (índice versionado)")
+		t.Error("/db/ must NOT be ignored (versioned index)")
 	}
 	if !strings.Contains(string(gi), "/raw/.tmp/") {
-		t.Error(".gitignore deveria conter /raw/.tmp/")
+		t.Error(".gitignore should contain /raw/.tmp/")
 	}
 	if git.CurrentBranch(dir) != "main" {
 		t.Errorf("branch = %q, want main", git.CurrentBranch(dir))
 	}
 	if !strings.Contains(gitLog(t, dir), "initialize vbrain") {
-		t.Error("commit inicial ausente")
+		t.Error("initial commit missing")
 	}
 }
 
@@ -56,7 +56,7 @@ func TestInitRaisesIfAlreadyInitialized(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := git.Init(dir); err == nil {
-		t.Fatal("segundo init deveria falhar")
+		t.Fatal("second init should fail")
 	}
 }
 
@@ -88,7 +88,7 @@ func TestCommitStagesAndCommitsNewFiles(t *testing.T) {
 		t.Fatalf("res = %+v", res)
 	}
 	if !strings.Contains(gitLog(t, dir), "add: hi") {
-		t.Error("commit não apareceu no log")
+		t.Error("commit didn't appear in the log")
 	}
 }
 
@@ -104,13 +104,13 @@ func TestCommitVersionsTheSQLiteIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !res.Committed {
-		t.Fatal("deveria commitar")
+		t.Fatal("should commit")
 	}
 	cmd := exec.Command("git", "ls-files", "db/")
 	cmd.Dir = dir
 	out, _ := cmd.Output()
 	if !strings.Contains(string(out), "db/vbrain.sqlite3") {
-		t.Error("índice SQLite deveria ser versionado")
+		t.Error("SQLite index should be versioned")
 	}
 }
 
@@ -120,7 +120,7 @@ func TestHasRemoteFalseWhenNoOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 	if git.HasRemote(dir, "origin") {
-		t.Fatal("não deveria ter remote")
+		t.Fatal("should not have a remote")
 	}
 }
 
@@ -151,6 +151,6 @@ func TestGitignoreIdempotent(t *testing.T) {
 	}
 	fi2, _ := os.Stat(filepath.Join(dir, ".gitignore"))
 	if !fi1.ModTime().Equal(fi2.ModTime()) {
-		t.Error("não deveria reescrever .gitignore existente")
+		t.Error("should not rewrite an existing .gitignore")
 	}
 }

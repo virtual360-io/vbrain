@@ -21,7 +21,7 @@ func stubFetchJina(t *testing.T, md string) {
 func TestURLDetectHttpAndHttps(t *testing.T) {
 	for _, u := range []string{"https://example.com/x", "http://example.com", "HTTPS://EXAMPLE.com"} {
 		if !(sources.URL{}).Detect(u) {
-			t.Errorf("deveria detectar %q", u)
+			t.Errorf("should detect %q", u)
 		}
 	}
 }
@@ -29,14 +29,14 @@ func TestURLDetectHttpAndHttps(t *testing.T) {
 func TestURLDetectRejectsNonUrl(t *testing.T) {
 	for _, u := range []string{"/tmp/foo.txt", "ftp://example.com", "example.com", ""} {
 		if (sources.URL{}).Detect(u) {
-			t.Errorf("não deveria detectar %q", u)
+			t.Errorf("should not detect %q", u)
 		}
 	}
 }
 
 func TestURLKindKey(t *testing.T) {
 	if (sources.URL{}).KindKey() != "url" {
-		t.Fatal("kind_key deveria ser url")
+		t.Fatal("kind_key should be url")
 	}
 }
 
@@ -50,13 +50,13 @@ func TestURLCopyToRawWritesMarkdownWithUrlSha(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(info.Path); err != nil {
-		t.Errorf("raw markdown deveria existir: %v", err)
+		t.Errorf("raw markdown should exist: %v", err)
 	}
 	if !strings.HasSuffix(info.OriginalFilename, ".md") {
 		t.Errorf("original_filename = %q", info.OriginalFilename)
 	}
 	if b, _ := os.ReadFile(info.Path); string(b) != sample {
-		t.Errorf("conteúdo = %q", b)
+		t.Errorf("content = %q", b)
 	}
 	sum := sha256.Sum256([]byte("https://example.com/start\n" + sample))
 	if info.SHA256 != hex.EncodeToString(sum[:]) {

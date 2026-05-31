@@ -41,7 +41,7 @@ func TestTwitterDetectXAndTwitterUrls(t *testing.T) {
 		"https://mobile.x.com/alok/status/123",
 	} {
 		if !(sources.Twitter{}).Detect(u) {
-			t.Errorf("deveria detectar %q", u)
+			t.Errorf("should detect %q", u)
 		}
 	}
 }
@@ -54,14 +54,14 @@ func TestTwitterDetectRejectsNonTweetUrls(t *testing.T) {
 		"/tmp/foo.txt",
 	} {
 		if (sources.Twitter{}).Detect(u) {
-			t.Errorf("não deveria detectar %q", u)
+			t.Errorf("should not detect %q", u)
 		}
 	}
 }
 
 func TestTwitterKindKey(t *testing.T) {
 	if (sources.Twitter{}).KindKey() != "tweet" {
-		t.Fatal("kind_key deveria ser tweet")
+		t.Fatal("kind_key should be tweet")
 	}
 }
 
@@ -78,7 +78,7 @@ func TestTwitterParseIDExtractsNumericStatusID(t *testing.T) {
 
 func TestTwitterParseIDRaisesForNonTweet(t *testing.T) {
 	if _, err := (sources.Twitter{}).ParseID("https://x.com/foo"); err == nil {
-		t.Fatal("deveria falhar para não-tweet")
+		t.Fatal("should fail for a non-tweet")
 	}
 }
 
@@ -86,13 +86,13 @@ func TestTwitterComputeTokenDeterministicNonEmpty(t *testing.T) {
 	a := (sources.Twitter{}).ComputeToken(tweetID)
 	b := (sources.Twitter{}).ComputeToken(tweetID)
 	if a != b {
-		t.Fatalf("não determinístico: %q != %q", a, b)
+		t.Fatalf("not deterministic: %q != %q", a, b)
 	}
 	if a == "" {
-		t.Fatal("token vazio")
+		t.Fatal("empty token")
 	}
 	if !regexp.MustCompile(`^[0-9]+$`).MatchString(a) {
-		t.Fatalf("token deveria ser só dígitos: %q", a)
+		t.Fatalf("token should be digits only: %q", a)
 	}
 }
 
@@ -148,7 +148,7 @@ func TestTwitterCleanArticleTextStripsXBoilerplate(t *testing.T) {
 	raw := "Don’t miss what’s happening\nLog in\nThe Title\n\nbody starts here\n\n© 2026 X Corp."
 	cleaned := (sources.Twitter{}).CleanArticleText(raw, "The Title")
 	if strings.Contains(cleaned, "© 2026 X Corp.") || strings.Contains(cleaned, "Don’t miss") {
-		t.Errorf("boilerplate não removido: %q", cleaned)
+		t.Errorf("boilerplate not removed: %q", cleaned)
 	}
 	if !strings.Contains(cleaned, "body starts here") {
 		t.Errorf("corpo perdido: %q", cleaned)
@@ -167,7 +167,7 @@ func TestTwitterExtractFromJSONSignalsEmptyTextWhenOnlyLink(t *testing.T) {
 	fake := `{"user":{"name":"X","screen_name":"x"},"created_at":"2026-01-01T00:00:00Z","text":"https://t.co/abc","entities":{"urls":[{"url":"https://t.co/abc","expanded_url":"https://elsewhere.test/article","display_url":"elsewhere.test/article"}]}}`
 	md := extractFrom(t, fake, "https://x.com/x/status/1", "1", "")
 	if !strings.Contains(md, "https://elsewhere.test/article") {
-		t.Error("deveria incluir o link expandido nas referências")
+		t.Error("should include the expanded link in the references")
 	}
 }
 

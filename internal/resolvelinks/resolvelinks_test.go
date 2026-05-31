@@ -11,9 +11,9 @@ import (
 
 func TestResolvesKnownSlugsAndDropsUnknown(t *testing.T) {
 	wiki := t.TempDir()
-	// página alvo existente
+	// existing target page
 	os.WriteFile(filepath.Join(wiki, "carreira-de-victor.md"), []byte("---\ntitle: Carreira\n---\nx\n"), 0o644)
-	// página com wikilink não-resolvido
+	// page with an unresolved wikilink
 	src := filepath.Join(wiki, "nota.md")
 	os.WriteFile(src, []byte("---\ntitle: Nota\n---\ntrabalha na [[V360]] e [[Fantasma]]\n"), 0o644)
 
@@ -29,10 +29,10 @@ func TestResolvesKnownSlugsAndDropsUnknown(t *testing.T) {
 	}
 	b, _ := os.ReadFile(src)
 	if !strings.Contains(string(b), "[V360](carreira-de-victor.md)") {
-		t.Errorf("link não aplicado: %s", b)
+		t.Errorf("link not applied: %s", b)
 	}
 	if !strings.Contains(string(b), "[[Fantasma]]") {
-		t.Errorf("wikilink inexistente deveria ficar intacto: %s", b)
+		t.Errorf("nonexistent wikilink should stay intact: %s", b)
 	}
 }
 

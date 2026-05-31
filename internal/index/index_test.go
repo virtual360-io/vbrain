@@ -10,8 +10,8 @@ import (
 	"github.com/virtual360-io/vbrain/internal/index"
 )
 
-// setup cria uma wiki temporária e um db em arquivo (não :memory:, pois Reindex
-// usa múltiplas queries — mas SetMaxOpenConns(1) garante uma conexão).
+// setup creates a temporary wiki and a file db (not :memory:, since Reindex
+// uses multiple queries — but SetMaxOpenConns(1) guarantees one connection).
 func setup(t *testing.T) (*sql.DB, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -79,17 +79,17 @@ func TestReindexIsIdempotentAndUpdatesBySha(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Sem mudança: nada inserido/atualizado.
+	// No change: nothing inserted/updated.
 	st, _ := index.Reindex(d, wiki)
 	if st.Inserted != 0 || st.Updated != 0 {
-		t.Fatalf("reindex idempotente esperado, got %+v", st)
+		t.Fatalf("expected idempotent reindex, got %+v", st)
 	}
 
-	// Muda o corpo: vira update.
+	// Change the body: becomes an update.
 	writePage(t, wiki, "foo.md", "---\ntitle: Foo\nkind: note\n---\nbody v2 changed\n")
 	st, _ = index.Reindex(d, wiki)
 	if st.Updated != 1 || st.Inserted != 0 {
-		t.Fatalf("update por sha esperado, got %+v", st)
+		t.Fatalf("expected update by sha, got %+v", st)
 	}
 }
 
@@ -142,7 +142,7 @@ func TestReindexRebuildsLinkGraph(t *testing.T) {
 		t.Fatalf("links = %d, want 2", st.Links)
 	}
 
-	// [[Bar]] resolve (to_page_id != NULL); [[Inexistente]] vira forward link.
+	// [[Bar]] resolves (to_page_id != NULL); [[Inexistente]] becomes a forward link.
 	var resolved, unresolved int
 	d.QueryRow("SELECT COUNT(*) FROM links WHERE to_page_id IS NOT NULL").Scan(&resolved)
 	d.QueryRow("SELECT COUNT(*) FROM links WHERE to_page_id IS NULL").Scan(&unresolved)

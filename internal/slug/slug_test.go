@@ -9,7 +9,7 @@ func mustFrom(t *testing.T, title string) string {
 	t.Helper()
 	s, err := From(title)
 	if err != nil {
-		t.Fatalf("From(%q) erro inesperado: %v", title, err)
+		t.Fatalf("From(%q) unexpected error: %v", title, err)
 	}
 	return s
 }
@@ -55,14 +55,14 @@ func TestTruncatesToMaxLengthWithoutTrailingDash(t *testing.T) {
 		t.Errorf("len(%q) = %d, want <= 50", s, len(s))
 	}
 	if strings.HasSuffix(s, "-") {
-		t.Errorf("não deveria terminar em traço após truncar: %q", s)
+		t.Errorf("should not end with a dash after truncation: %q", s)
 	}
 }
 
 func TestEmptyOrPunctOnlyRaises(t *testing.T) {
 	for _, in := range []string{"", "   ", "!!! ??? ..."} {
 		if _, err := From(in); err == nil {
-			t.Errorf("From(%q) deveria falhar", in)
+			t.Errorf("From(%q) should fail", in)
 		}
 	}
 }

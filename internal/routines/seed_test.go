@@ -24,12 +24,12 @@ func TestSeedDefaultsAddsDreamOnceIdempotent(t *testing.T) {
 	if dream.NextRun == nil {
 		t.Error("dream sem next_run")
 	}
-	// prompt adaptado pro Go: chama o binário vbrain, não Ruby.
+	// prompt adapted to Go: calls the vbrain binary, not Ruby.
 	if !strings.Contains(dream.Prompt, "vbrain query-log") || strings.Contains(dream.Prompt, "bundle exec ruby") {
-		t.Errorf("prompt não adaptado pro Go")
+		t.Errorf("prompt not adapted to Go")
 	}
 
-	// Segunda chamada: skip, não duplica.
+	// Second call: skip, doesn't duplicate.
 	r2, _ := routines.SeedDefaults(false, fixedNow)
 	if len(r2.Seeded) != 0 || len(r2.Skipped) != 1 {
 		t.Fatalf("r2 = %+v", r2)
