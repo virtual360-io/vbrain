@@ -16,13 +16,24 @@ const RealtimeDir = "_realtime"
 // determina mais a pasta (layout plano, estilo ai-memory).
 var Kinds = []string{"concept", "decision", "gotcha", "note", "rule", "realtime"}
 
-// DataHome devolve a raiz dos dados: VBRAIN_HOME se setado e não-vazio, senão
-// ~/vbrain.
+// DataHome devolve a raiz dos dados: VBRAIN_HOME se setado e não-vazio; senão,
+// se o diretório atual é uma base (carrega wiki/), usa-o — cobre o cloud onde o
+// checkout é a própria base e o sub-agente não herda o env do shell; só então
+// cai no ~/vbrain.
 func DataHome() string {
 	if env := os.Getenv("VBRAIN_HOME"); env != "" {
 		return expand(env)
 	}
+	if cwd, err := os.Getwd(); err == nil && IsBase(cwd) {
+		return cwd
+	}
 	return expand(filepath.Join("~", "vbrain"))
+}
+
+// IsBase indica se dir é uma base vbrain (carrega a wiki/, fonte da verdade).
+func IsBase(dir string) bool {
+	fi, err := os.Stat(filepath.Join(dir, "wiki"))
+	return err == nil && fi.IsDir()
 }
 
 func RawDir() string  { return filepath.Join(DataHome(), "raw") }

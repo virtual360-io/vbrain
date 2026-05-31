@@ -14,13 +14,29 @@ func TestDataHomeUsesEnvWhenSet(t *testing.T) {
 	}
 }
 
-func TestDataHomeDefaultsToHomeVbrainWhenEnvBlank(t *testing.T) {
+func TestDataHomeDefaultsToHomeVbrainWhenEnvBlankAndNotInBase(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	want := filepath.Join(home, "vbrain")
 
+	// cwd num dir sem wiki/ → não é base → cai no ~/vbrain.
+	t.Chdir(t.TempDir())
 	t.Setenv("VBRAIN_HOME", "")
 	if got := DataHome(); got != want {
-		t.Fatalf("blank env: DataHome() = %q, want %q", got, want)
+		t.Fatalf("blank env, fora de base: DataHome() = %q, want %q", got, want)
+	}
+}
+
+func TestDataHomeUsesLocalBaseWhenEnvBlankAndRunningInBase(t *testing.T) {
+	// cwd é uma base (tem wiki/) → usa-o, mesmo sem VBRAIN_HOME (conserta o
+	// cloud onde o checkout é a base).
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "wiki"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	t.Setenv("VBRAIN_HOME", "")
+	if got := DataHome(); got != dir {
+		t.Fatalf("dentro de base: DataHome() = %q, want %q", got, dir)
 	}
 }
 
