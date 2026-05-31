@@ -1,175 +1,171 @@
 ---
 name: vbrain-routine
-description: Watch loop das rotinas do vbrain. Verifica em ~/vbrain/config/routines/routines.yml quais rotinas têm next_run vencido, dispara sub-agente paralelo pra cada, e a próxima execução é calculada deterministicamente pelo cron (fugit). Se chamado sem args, esse é o comportamento padrão (watch). Use quando o usuário pedir "roda minhas rotinas", "vbrain-routine", "executa rotina morning-brief", "fica rodando em background", ou referenciar uma rotina pelo slug.
+description: Watch loop for vbrain routines. Checks ~/vbrain/config/routines/routines.yml for routines whose next_run is due, fires a parallel sub-agent for each, and the next run is computed deterministically by cron (robfig/cron). Called without args, that's the default behavior (watch). Use when the user asks "run my routines", "vbrain-routine", "run the morning-brief routine", "keep running in the background", or references a routine by slug.
 allowed-tools: Bash, Read, Agent, AskUserQuestion, Skill, CronList
 ---
 
 # vbrain-routine
 
-Loop de execução das rotinas. **Watch é o default**: sem args, esta skill
-roda um "tick" (claim de rotinas vencidas + dispatch + atualização de
-`next_run`) e garante que o `/loop` global esteja registrado pra rearmar
-sozinho a cada 15 minutos.
+Routine execution loop. **Watch is the default**: with no args, this skill runs
+one "tick" (claim due routines + dispatch + update `next_run`) and ensures the
+global `/loop` is registered to re-arm itself every 15 minutes.
 
-## Inputs (formas aceitas)
+## Inputs (accepted forms)
 
-- **(vazio)** → **tick + watch**: identifica rotinas com `next_run <= now`,
-  dispara sub-agente paralelo pra cada, deixa o `/loop 15m /vbrain-routine`
-  rodando. Idempotente.
-- **`<slug>`** → executa só essa rotina **agora** (manual trigger), sem
-  alterar `next_run` nem `last_run`.
-- **`status`** → lista todas com slug, schedule, próximo run, último run,
-  enabled. Não dispara nada.
+- **(empty)** → **tick + watch**: identifies routines with `next_run <= now`,
+  fires a parallel sub-agent for each, leaves `/loop 15m /vbrain-routine`
+  running. Idempotent.
+- **`<slug>`** → runs only that routine **now** (manual trigger), without
+  changing `next_run` or `last_run`.
+- **`status`** → lists all of them with slug, schedule, next run, last run,
+  enabled. Fires nothing.
 
-## Passos (modo default — watch)
+## Steps (default mode — watch)
 
-### 1. Tick: claim de rotinas vencidas
+### 1. Tick: claim due routines
 
 ```bash
 vbrain routines
 ```
 
-Esse script é **determinístico** e atômico:
-- Lê `~/vbrain/config/routines/routines.yml`.
-- Identifica rotinas com `enabled: true`, `schedule != null`, e
+This command is **deterministic** and atomic:
+- Reads `~/vbrain/config/routines/routines.yml`.
+- Identifies routines with `enabled: true`, `schedule != null`, and
   `next_run <= now`.
-- Para cada uma: marca `last_run = now`, avança `next_run` para o próximo
-  tick do cron via fugit, escreve YAML de volta atomicamente.
-- Retorna JSON com `due: [{slug, description, prompt}, ...]`.
+- For each: sets `last_run = now`, advances `next_run` to the next cron tick
+  (robfig/cron), writes the YAML back atomically.
+- Returns JSON with `due: [{slug, description, prompt}, ...]`.
 
-Semântica: **at-most-once**. Se o sub-agente falhar, aquele run é perdido
-(não re-tentamos no próximo tick). Pra mission-critical, o usuário pode
-re-disparar manualmente com `/vbrain-routine <slug>`.
+Semantics: **at-most-once**. If the sub-agent fails, that run is lost (we don't
+retry on the next tick). For mission-critical, the user can re-trigger manually
+with `/vbrain-routine <slug>`.
 
-### 2. Dispatch dos sub-agentes (em paralelo)
+### 2. Dispatch the sub-agents (in parallel)
 
-Para cada item em `due`, lance um `Agent` em **uma única mensagem** com
-múltiplos tool_use blocks:
+For each item in `due`, launch an `Agent` in **a single message** with multiple
+tool_use blocks:
 
-- `subagent_type: "claude"` (precisa de `Tools: *` pra invocar outras
-  skills/MCPs).
-- `description`: o `slug` da rotina.
+- `subagent_type: "claude"` (needs `Tools: *` to invoke other skills/MCPs).
+- `description`: the routine's `slug`.
 - `prompt`:
 
 ```
-Você está executando a rotina vbrain "<SLUG>": <DESCRIPTION>
+You are running the vbrain routine "<SLUG>": <DESCRIPTION>
 
-Instrução:
+Instruction:
 
 <PROMPT>
 
-Quando terminar, devolva um único bloco markdown auto-contido com o
-resultado (sem prefixos do tipo "aqui está"). Se a instrução chamar
-uma skill (slash command), invoque via `Skill` tool. Se chamar uma
-ferramenta MCP (qualquer `mcp__*`), invoque direto — não enumere as
-disponíveis; use as que sua sessão tiver carregadas. Datas relativas
-como "hoje" ou "essa semana" são em relação ao momento da execução.
+When done, return a single self-contained markdown block with the result (no
+prefixes like "here's"). If the instruction calls a skill (slash command),
+invoke it via the `Skill` tool. If it calls an MCP tool (any `mcp__*`), invoke
+it directly — don't enumerate the available ones; use whatever your session has
+loaded. Relative dates like "today" or "this week" are relative to the execution
+moment.
 ```
 
-### 3. Garantir o /loop ativo (com guarda anti-recursão)
+### 3. Ensure /loop is active (with an anti-recursion guard)
 
-**CRÍTICO**: o `/loop` quando chamado executa o prompt **imediatamente**
-além de agendar o cron. Se essa skill chamar `/loop /vbrain-routine` sem
-guarda, entra em recursão infinita (loop chama vbrain-routine que chama
-loop que chama vbrain-routine…).
+**CRITICAL**: `/loop`, when called, runs the prompt **immediately** in addition
+to scheduling the cron. If this skill calls `/loop /vbrain-routine` without a
+guard, it goes into infinite recursion (loop calls vbrain-routine which calls
+loop which calls vbrain-routine…).
 
-Sempre cheque PRIMEIRO via `CronList` se já existe job recurring com
-prompt `/vbrain-routine`. Pseudocódigo:
+Always check FIRST via `CronList` whether a recurring job with the prompt
+`/vbrain-routine` already exists. Pseudocode:
 
 ```
 crons = CronList()
-already_active = crons.any? { |c| c.recurring && c.prompt =~ %r{^/vbrain-routine\b} }
+already_active = any cron c where c.recurring and c.prompt matches ^/vbrain-routine\b
 
 if already_active:
-  # skip — o cron já existente vai disparar o próximo tick a cada 15min
+  # skip — the existing cron will fire the next tick every 15 min
 else:
   Skill(skill: "loop", args: "15m /vbrain-routine")
 ```
 
-A primeira invocação manual de `/vbrain-routine` (ou de
-`/vbrain-add-routine` que termina invocando esta) entra no ramo `else`
-e registra o cron. As invocações subsequentes (disparadas pelo próprio
-cron firing) entram no ramo `if` e pulam — sem recursão.
+The first manual invocation of `/vbrain-routine` (or of `/vbrain-add-routine`,
+which ends up invoking this) takes the `else` branch and registers the cron.
+Subsequent invocations (fired by the cron itself) take the `if` branch and skip
+— no recursion.
 
-**Granularidade**: como o tick acontece a cada 15min, esse é o piso da
-detecção. Rotinas com cron mais agressivo (`*/5 * * * *`) sofrem atraso
-de até 15min — o sub-agente vai disparar no próximo tick que vencer o
-`next_run`. Pra rotinas mission-critical sub-15min, o usuário pode rodar
-`/loop 5m /vbrain-routine` manualmente (e cancelar o de 15min via
-`CronDelete`).
-Se já estiver ativo, `/loop` provavelmente recusa ou substitui — siga o
-feedback dele e **não pare** o fluxo por isso (loop pode já estar
-funcionando).
+**Granularity**: since the tick happens every 15 min, that's the detection
+floor. Routines with a more aggressive cron (`*/5 * * * *`) are delayed by up to
+15 min — the sub-agent fires on the next tick where `next_run` is due. For
+mission-critical sub-15-min routines, the user can run `/loop 5m /vbrain-routine`
+manually (and cancel the 15-min one via `CronDelete`).
+If it's already active, `/loop` probably refuses or replaces it — follow its
+feedback and **don't stop** the flow over it (the loop may already be working).
 
-### 4. Reportar
+### 4. Report
 
-Mostre:
+Show:
 
 ```
-# Rotinas executadas (N)
+# Routines run (N)
 
 > tick @ <now ISO8601 UTC>
-> próximo tick automático em 15m via /loop
+> next automatic tick in 15m via /loop
 
 ## <slug 1> — <description 1>
 
-<output do sub-agente 1>
+<sub-agent 1 output>
 
 ---
 
 ## <slug 2> — <description 2>
 
-<output do sub-agente 2>
+<sub-agent 2 output>
 
 ---
 
 …
 ```
 
-Se `due_count == 0`, só reporte:
+If `due_count == 0`, just report:
 
 ```
-# Tick @ <now ISO8601 UTC>: nenhuma rotina vencida.
+# Tick @ <now ISO8601 UTC>: no routines due.
 
-Próximas:
+Upcoming:
 - <slug 1>: <next_run 1>
 - <slug 2>: <next_run 2>
 ```
 
-(Use `vbrain routine-list` pra pegar `next_run` se precisar de detalhes.)
+(Use `vbrain routine-list` to get `next_run` if you need details.)
 
-## Passos (modo `<slug>` — manual trigger)
+## Steps (`<slug>` mode — manual trigger)
 
-1. `vbrain routine-list --slug <slug>`
-   pra recuperar o entry.
-2. Se `count == 0`, reporte "rotina `<slug>` não existe" + sugira
+1. `vbrain routine-list --slug <slug>` to retrieve the entry.
+2. If `count == 0`, report "routine `<slug>` doesn't exist" + suggest
    `/vbrain-add-routine`.
-3. Lance **um** `Agent` com o mesmo template do passo 2 acima.
-4. Reporte o output. **Não chame** `vbrain routines` — manual trigger
-   não altera `next_run`/`last_run`.
+3. Launch **one** `Agent` with the same template as step 2 above.
+4. Report the output. **Don't call** `vbrain routines` — a manual trigger
+   doesn't change `next_run`/`last_run`.
 
-## Passos (modo `status`)
+## Steps (`status` mode)
 
 ```bash
 vbrain routine-list
 ```
 
-Tabela:
+Table:
 ```
 | slug | schedule | next_run | last_run | enabled |
 ```
 
-## Regras
+## Rules
 
-- **Sempre sub-agente**, nunca inline. Razões: isolamento, paralelismo,
-  fail isolation.
-- **Watch é default** — sem args, sempre re-arme o `/loop` (idempotente).
-- **Não modifique** `routines.yml` aqui — apenas pelo `vbrain routines`
-  (que atualiza next_run/last_run). Adição/edição vem do `/vbrain-add-routine`.
-- **Manual trigger** (`<slug>`) NÃO altera state. É só pra teste/debug
-  ou execução fora do schedule.
-- Se algum sub-agente falhar, mostre na seção daquele slug um aviso
-  `> erro: <mensagem>` e continue com os outros. NÃO re-dispare —
-  semântica é at-most-once por design.
-- **Não bootstrape `/loop`** no modo `<slug>` ou `status` — esses são
-  comandos one-shot.
+- **Always a sub-agent**, never inline. Reasons: isolation, parallelism, fail
+  isolation.
+- **Watch is the default** — with no args, always re-arm `/loop` (idempotent).
+- **Don't modify** `routines.yml` here — only via `vbrain routines` (which
+  updates next_run/last_run). Adding/editing comes from `/vbrain-add-routine`.
+- **Manual trigger** (`<slug>`) does NOT change state. It's only for
+  test/debug or off-schedule execution.
+- If a sub-agent fails, show a `> error: <message>` notice in that slug's
+  section and continue with the others. Do NOT re-fire — the semantics are
+  at-most-once by design.
+- **Don't bootstrap `/loop`** in `<slug>` or `status` mode — those are one-shot
+  commands.
+```

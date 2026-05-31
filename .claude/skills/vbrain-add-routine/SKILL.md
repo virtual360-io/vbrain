@@ -1,154 +1,152 @@
 ---
 name: vbrain-add-routine
-description: Adiciona uma rotina ao vbrain (~/vbrain/config/routines/routines.yml) com slug, descrição, cron schedule e prompt. Computa next_run inicial deterministicamente via fugit. Pergunta se quer testar agora via slug. NÃO bootstrappa nenhum loop nem cron — isso é responsabilidade do /vbrain-routine quando o usuário invocar. Use quando o usuário pedir "cria uma rotina", "adiciona rotina", "rotina que roda toda manhã às 6h", "rotina horária", ou "vbrain-add-routine".
+description: Adds a routine to vbrain (~/vbrain/config/routines/routines.yml) with slug, description, cron schedule, and prompt. Computes the initial next_run deterministically (robfig/cron). Asks whether you want to test it now via the slug. Does NOT bootstrap any loop or cron — that's /vbrain-routine's job when the user invokes it. Use when the user asks "create a routine", "add a routine", "a routine that runs every morning at 6", "an hourly routine", or "vbrain-add-routine".
 allowed-tools: Bash, Read, Write, AskUserQuestion, Agent
 ---
 
 # vbrain-add-routine
 
-Cria uma rotina no `~/vbrain/config/routines/routines.yml`. O binário vbrain
-computa `next_run` deterministicamente (fugit) a partir do cron + agora.
-Opcionalmente, pergunta se quer **testar agora** via sub-agente (manual
-trigger via slug, não altera state).
+Creates a routine in `~/vbrain/config/routines/routines.yml`. The vbrain binary
+computes `next_run` deterministically (robfig/cron) from the cron + now.
+Optionally asks whether you want to **test it now** via a sub-agent (manual
+trigger via slug, doesn't change state).
 
-**Esta skill NUNCA toca em `/loop`, `CronCreate`, ou `/vbrain-routine` em
-modo watch.** Bootstrap do watch loop é responsabilidade exclusiva do
-`/vbrain-routine` quando invocado pelo usuário.
+**This skill NEVER touches `/loop`, `CronCreate`, or `/vbrain-routine` in watch
+mode.** Bootstrapping the watch loop is exclusively `/vbrain-routine`'s job when
+invoked by the user.
 
 ## Inputs
 
-- **slug**, **description**, **schedule**, **prompt**: peça em sequência
-  se faltarem.
+- **slug**, **description**, **schedule**, **prompt**: ask for them in sequence
+  if missing.
 
-## Passos
+## Steps
 
-### 1. Coletar inputs
+### 1. Collect inputs
 
-Peça em ordem (uma pergunta por turno, mensagem livre):
+Ask in order (one question per turn, free-form message):
 
 **Slug**:
-> "Slug da rotina, kebab-case (ex.: `morning-brief`, `email-hourly`,
+> "Routine slug, kebab-case (e.g. `morning-brief`, `email-hourly`,
 > `weekly-review`)?"
 
 **Description**:
-> "Descrição (uma linha)?"
+> "Description (one line)?"
 
-**Schedule** — aceite linguagem natural e converta pra cron 5-field
-padrão (`min hora dia mês dia-semana`). Exemplos pra mostrar:
+**Schedule** — accept natural language and convert it to a standard 5-field
+cron (`min hour day month day-of-week`). Examples to show:
 
-> "Quando deve rodar? Aceito linguagem natural ou cron direto.
-> Exemplos:
-> - `0 6 * * *` (todo dia 06:00)
-> - `0 * * * *` (de hora em hora)
-> - `0 10 * * 3` (toda quarta às 10:00)
-> - `*/15 9-18 * * 1-5` (a cada 15min, 9-18h, dias úteis)
-> - `0 8 * * 1` (toda segunda às 08:00)"
+> "When should it run? I accept natural language or a cron directly.
+> Examples:
+> - `0 6 * * *` (every day at 06:00)
+> - `0 * * * *` (hourly)
+> - `0 10 * * 3` (every Wednesday at 10:00)
+> - `*/15 9-18 * * 1-5` (every 15 min, 9-18h, weekdays)
+> - `0 8 * * 1` (every Monday at 08:00)"
 
-Converta natural → cron e **confirme com o usuário** antes de seguir:
-> "Vou usar `0 6 * * *` (todo dia 06:00). Confirma?"
+Convert natural → cron and **confirm with the user** before proceeding:
+> "I'll use `0 6 * * *` (every day at 06:00). Confirm?"
 
-**Importante**: o cron é interpretado no **TZ local do sistema** (não UTC).
-Se a máquina é -03:00 e o cron é `0 6 * * *`, dispara às 06:00 horário
-de Brasília. Mencione isso se relevante (ex.: usuário viajando).
+**Important**: the cron is interpreted in the system's **local TZ** (not UTC).
+If the machine is at -03:00 and the cron is `0 6 * * *`, it fires at 06:00
+Brasília time. Mention this if relevant (e.g. user traveling).
 
 **Prompt**:
-> "Cole o prompt. Pode usar markdown. Geralmente referencia outras skills
-> (slash commands tipo `/vbrain-query-knowledge`), ferramentas MCP
-> (`mcp__*` — quaisquer que sua sessão tiver carregadas), ou instruções
-> de alto nível. O sub-agente que rodar essa rotina executa esse texto
-> como instrução."
+> "Paste the prompt. You can use markdown. It usually references other skills
+> (slash commands like `/vbrain-query-knowledge`), MCP tools (`mcp__*` —
+> whatever your session has loaded), or high-level instructions. The sub-agent
+> that runs this routine executes this text as its instruction."
 
-### 2. Detectar colisão de slug
+### 2. Detect slug collision
 
 ```bash
 vbrain routine-list --slug <slug>
 ```
 
-Se `count > 0`, use `AskUserQuestion`:
-> "Já existe rotina `<slug>`. Substituir?"
-> 1. Substituir (Recommended)
-> 2. Cancelar
+If `count > 0`, use `AskUserQuestion`:
+> "Routine `<slug>` already exists. Replace it?"
+> 1. Replace (Recommended)
+> 2. Cancel
 
-Substituir → adicione `--replace` ao próximo passo. Cancelar → pare.
+Replace → add `--replace` to the next step. Cancel → stop.
 
-### 3. Salvar prompt em arquivo temporário
+### 3. Save the prompt to a temporary file
 
 ```
 /tmp/vbrain-routine-prompt-<slug>.md
 ```
 
-Use `Write`. Nunca passe prompt direto via `--prompt` (escape de shell
-quebra com markdown/aspas/newlines).
+Use `Write`. Never pass the prompt directly via `--prompt` (shell escaping
+breaks with markdown/quotes/newlines).
 
-### 4. Rodar o script
+### 4. Run the command
 
 ```bash
 vbrain routine-add --slug <slug> --description "<desc>" --schedule "<cron>" --prompt-file /tmp/vbrain-routine-prompt-<slug>.md [--replace]
 ```
 
-Output JSON: `{"config_path", "routine": {... incluindo next_run inicial}, "total"}`.
+Output JSON: `{"config_path", "routine": {... including initial next_run}, "total"}`.
 
-### 5. Commit (se houver repo git no `~/vbrain`)
+### 5. Commit (if there's a git repo in `~/vbrain`)
 
 ```bash
-vbrain commit --message "routine: adiciona '<slug>' (<cron>)"
+vbrain commit --message "routine: add '<slug>' (<cron>)"
 ```
 
-(Use `routine: substitui '<slug>'` quando `--replace`.)
+(Use `routine: replace '<slug>'` when `--replace`.)
 
-### 6. Oferecer teste agora (opcional)
+### 6. Offer to test now (optional)
 
 Use `AskUserQuestion`:
 
-> "Rotina criada. Quer testar agora? (manual trigger via slug, não conta
-> como tick, não altera next_run)"
-> 1. Sim, rodar agora (Recommended)
-> 2. Não, só salvar
+> "Routine created. Want to test it now? (manual trigger via slug, doesn't count
+> as a tick, doesn't change next_run)"
+> 1. Yes, run now (Recommended)
+> 2. No, just save
 
-Se "Sim": lance **um** `Agent` (`subagent_type: "claude"`) com o template
-de execução de rotina:
+If "Yes": launch **one** `Agent` (`subagent_type: "claude"`) with the
+routine-execution template:
 
 ```
-Você está executando a rotina vbrain "<SLUG>": <DESCRIPTION>
+You are running the vbrain routine "<SLUG>": <DESCRIPTION>
 
-Instrução:
+Instruction:
 
 <PROMPT>
 
-Quando terminar, devolva um único bloco markdown auto-contido com o
-resultado (sem prefixos). Se chamar uma skill (slash command), invoque
-via `Skill` tool. Se chamar uma ferramenta MCP (qualquer `mcp__*`),
-invoque direto — use o que sua sessão tiver disponível, não enumere.
+When done, return a single self-contained markdown block with the result (no
+prefixes). If you call a skill (slash command), invoke it via the `Skill` tool.
+If you call an MCP tool (any `mcp__*`), invoke it directly — use whatever your
+session has available, don't enumerate.
 ```
 
-Mostre o output do sub-agente abaixo do report (passo 7).
+Show the sub-agent's output below the report (step 7).
 
-### 7. Reportar
+### 7. Report
 
-Mostre:
-- `slug`, `description`, `schedule` (cron + tradução humana)
-- `next_run` (em horário local + UTC entre parênteses)
-- Primeiras linhas do `prompt`
-- Se o usuário pediu teste: o output do sub-agente.
-- **Como iniciar o watch loop** (separadamente): "Pra essa rotina rodar
-  automaticamente nos horários do cron, invoque `/vbrain-routine` (sem
-  args) quando quiser começar o watch — ele bootstrappa o `/loop 15m`
-  com guarda CronList."
+Show:
+- `slug`, `description`, `schedule` (cron + human translation)
+- `next_run` (in local time + UTC in parentheses)
+- First lines of the `prompt`
+- If the user requested a test: the sub-agent's output.
+- **How to start the watch loop** (separately): "For this routine to run
+  automatically at the cron times, invoke `/vbrain-routine` (no args) whenever
+  you want to start the watch — it bootstraps `/loop 15m` with a CronList
+  guard."
 
-## Regras
+## Rules
 
-- **NUNCA** invoque `/loop`, `Skill loop`, `CronCreate`, ou `/vbrain-routine`
-  sem args. Esta skill só altera o YAML + opcionalmente dispara UM
-  sub-agente pra teste manual via slug. Bootstrap do watch é
-  responsabilidade exclusiva do `/vbrain-routine` quando o usuário
-  invocar.
-- **Nunca** escreva direto em `routines.yml` — sempre pelo script.
-- **Nunca** invente prompt — pegue literal do usuário.
-- **Sempre** confirme a tradução natural → cron com o usuário antes de
-  salvar.
-- Slug normalizado por `VBrain::Slug.from` (kebab-case ASCII). Se a
-  normalização vira vazio, o script aborta e a skill pede outro slug.
-- Se schedule for omitido/nulo, rotina vira **manual-only** (não tem
-  next_run). Permita isso só se o usuário explicitamente pedir.
-- O cron é interpretado no TZ do sistema. Pra mudar TZ, exporte
-  `TZ=America/Sao_Paulo` (ou outro) antes de invocar a skill.
+- **NEVER** invoke `/loop`, `Skill loop`, `CronCreate`, or `/vbrain-routine`
+  without args. This skill only changes the YAML + optionally fires ONE
+  sub-agent for a manual test via slug. Bootstrapping the watch is exclusively
+  `/vbrain-routine`'s job when the user invokes it.
+- **Never** write directly into `routines.yml` — always via the command.
+- **Never** invent the prompt — take it literally from the user.
+- **Always** confirm the natural → cron translation with the user before saving.
+- The slug is normalized by the vbrain slug rules (ASCII kebab-case). If
+  normalization yields empty, the command aborts and the skill asks for another
+  slug.
+- If the schedule is omitted/null, the routine becomes **manual-only** (it has
+  no next_run). Allow this only if the user explicitly asks.
+- The cron is interpreted in the system TZ. To change the TZ, export
+  `TZ=America/Sao_Paulo` (or another) before invoking the skill.
