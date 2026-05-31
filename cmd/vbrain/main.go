@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/virtual360-io/vbrain/internal/db"
 	"github.com/virtual360-io/vbrain/internal/git"
@@ -16,13 +17,14 @@ import (
 	"github.com/virtual360-io/vbrain/internal/ingest"
 	"github.com/virtual360-io/vbrain/internal/paths"
 	"github.com/virtual360-io/vbrain/internal/resolvelinks"
+	"github.com/virtual360-io/vbrain/internal/routines"
 	"github.com/virtual360-io/vbrain/internal/search"
 	"github.com/virtual360-io/vbrain/internal/writepages"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "uso: vbrain <reindex|query|ingest|write-pages|resolve-links|commit> [args]")
+		fmt.Fprintln(os.Stderr, "uso: vbrain <reindex|query|ingest|write-pages|resolve-links|commit|routines> [args]")
 		os.Exit(2)
 	}
 	var err error
@@ -39,6 +41,8 @@ func main() {
 		err = cmdResolveLinks(os.Args[2:])
 	case "ingest":
 		err = cmdIngest(os.Args[2:])
+	case "routines":
+		err = cmdRoutines(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "subcomando desconhecido: %q\n", os.Args[1])
 		os.Exit(2)
@@ -313,6 +317,62 @@ func cmdIngest(args []string) error {
 		return err
 	}
 	return emitJSON(res)
+}
+
+func cmdRoutines(args []string) error {
+	fs := flag.NewFlagSet("routines", flag.ContinueOnError)
+	nowStr := fs.String("now", "", "ISO8601 (default: agora)")
+	dryRun := fs.Bool("dry-run", false, "não reivindica; só lista as vencidas")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	if *nowStr != "" {
+		t, err := time.Parse(time.RFC3339, *nowStr)
+		if err != nil {
+			return fmt.Errorf("--now inválido: %w", err)
+		}
+		now = t.UTC()
+	}
+
+	due := []map[string]any{}
+	if *dryRun {
+		rs, err := routines.DueDryRun(now)
+		if err != nil {
+			return err
+		}
+		for _, r := range rs {
+			due = append(due, dueEntry(r, nil))
+		}
+	} else {
+		cs, err := routines.ClaimDue(now)
+		if err != nil {
+			return err
+		}
+		for _, c := range cs {
+			ca := c.ClaimedAt
+			due = append(due, dueEntry(c.Routine, &ca))
+		}
+	}
+
+	return emitJSON(map[string]any{
+		"now":         now.Format(time.RFC3339),
+		"config_path": routines.ConfigPath(),
+		"due_count":   len(due),
+		"due":         due,
+	})
+}
+
+func dueEntry(r routines.Routine, claimedAt *string) map[string]any {
+	return map[string]any{
+		"slug":        r.Slug,
+		"description": r.Description,
+		"schedule":    r.Schedule,
+		"prompt":      r.Prompt,
+		"last_run":    r.LastRun,
+		"claimed_at":  claimedAt,
+	}
 }
 
 func emitJSON(v any) error {
