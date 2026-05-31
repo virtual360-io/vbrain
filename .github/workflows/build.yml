@@ -49,13 +49,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Monotonic version from the run number (e.g. v0.1.42). gh creates the
-          # tag at this commit and --generate-notes builds the changelog from the
-          # commits/PRs since the previous tag.
+          # tag at this commit. The changelog is the list of commits since the
+          # previous versioned tag — commit-based (not PR-based), because changes
+          # land as direct commits to main here.
           tag="v0.1.${{ github.run_number }}"
+          prev=$(git tag -l 'v0.1.*' | sort -V | tail -n1)
+          range="HEAD"; [ -n "$prev" ] && range="${prev}..HEAD"
+          changelog=$(git log --no-merges --pretty='- %s (%h)' "$range")
+          [ -z "$changelog" ] && changelog="- no changes"
+          body=$(printf '## Changes since %s\n\n%s' "${prev:-the beginning}" "$changelog")
           gh release create "$tag" dist/* \
             --title "$tag" \
             --target "$GITHUB_SHA" \
-            --generate-notes
+            --notes "$body"
 
       - name: Update rolling "latest" (back-compat for already-shipped binaries)
         env:
