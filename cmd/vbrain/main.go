@@ -1,5 +1,5 @@
-// Command vbrain é o CLI determinístico do vbrain (reindex, query, …). Porta
-// dos scripts Ruby: JSON no stdout (lido pelas skills), texto humano no stderr.
+// Command vbrain is vbrain's deterministic CLI (reindex, query, …). Ported from
+// the Ruby scripts: JSON on stdout (read by the skills), human text on stderr.
 package main
 
 import (
@@ -37,7 +37,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "uso: vbrain <reindex|query|ingest|write-pages|resolve-links|commit|routines|realtime> [args]")
+		fmt.Fprintln(os.Stderr, "usage: vbrain <reindex|query|ingest|write-pages|resolve-links|commit|routines|realtime|install|update> [args]")
 		os.Exit(2)
 	}
 	var err error
@@ -79,11 +79,11 @@ func main() {
 	case "update":
 		err = cmdUpdate(os.Args[2:])
 	default:
-		fmt.Fprintf(os.Stderr, "subcomando desconhecido: %q\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown subcommand: %q\n", os.Args[1])
 		os.Exit(2)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "erro:", err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
@@ -107,14 +107,15 @@ func cmdReindex(args []string) error {
 
 func cmdQuery(args []string) error {
 	fs := flag.NewFlagSet("query", flag.ContinueOnError)
-	limit := fs.Int("limit", 10, "número máximo de páginas")
+	limit := fs.Int("limit", 10, "max number of pages")
 	format := fs.String("format", "markdown", "markdown|json")
 	prefix := fs.Bool("prefix", false, "prefix matching")
-	sourceQuery := fs.String("source-query", "", "pergunta NL original")
-	noLog := fs.Bool("no-log", false, "não registrar no query_log")
+	sourceQuery := fs.String("source-query", "", "original NL question")
+	noLog := fs.Bool("no-log", false, "don't record in query_log")
 
-	// O flag do Go não permuta (para no 1º posicional); a skill passa flags
-	// depois da query (`query "x" --format json`). Separamos manualmente.
+	// Go's flag package doesn't permute (it stops at the first positional); the
+	// skill passes flags after the query (`query "x" --format json`). Split them
+	// manually.
 	flagArgs, positionals := splitArgs(args)
 	if err := fs.Parse(flagArgs); err != nil {
 		return err
@@ -123,7 +124,7 @@ func cmdQuery(args []string) error {
 	query := strings.TrimSpace(strings.Join(positionals, " "))
 	if query == "" {
 		fs.Usage()
-		return fmt.Errorf("query vazia")
+		return fmt.Errorf("empty query")
 	}
 
 	if err := paths.EnsureDirs(); err != nil {
@@ -152,18 +153,18 @@ func cmdQuery(args []string) error {
 	return nil
 }
 
-// boolFlags são as flags de query que não consomem valor.
+// boolFlags are the query flags that don't consume a value.
 var boolFlags = map[string]bool{"-prefix": true, "--prefix": true, "-no-log": true, "--no-log": true}
 
-// splitArgs separa flags (e seus valores) de argumentos posicionais, permitindo
-// flags em qualquer posição — replica o comportamento do OptionParser do Ruby.
+// splitArgs separates flags (and their values) from positional arguments,
+// allowing flags in any position — mirrors Ruby's OptionParser behavior.
 func splitArgs(args []string) (flagArgs, positionals []string) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if strings.HasPrefix(a, "-") && a != "-" {
 			flagArgs = append(flagArgs, a)
-			// `--flag valor`: consome o próximo token como valor (exceto bool
-			// flags e a forma `--flag=valor`).
+			// `--flag value`: consume the next token as its value (except bool
+			// flags and the `--flag=value` form).
 			if !strings.Contains(a, "=") && !boolFlags[a] && i+1 < len(args) {
 				i++
 				flagArgs = append(flagArgs, args[i])
@@ -177,13 +178,13 @@ func splitArgs(args []string) (flagArgs, positionals []string) {
 
 func cmdCommit(args []string) error {
 	fs := flag.NewFlagSet("commit", flag.ContinueOnError)
-	message := fs.String("message", "", "mensagem de commit")
-	noPush := fs.Bool("no-push", false, "não dar push")
+	message := fs.String("message", "", "commit message")
+	noPush := fs.Bool("no-push", false, "don't push")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *message == "" {
-		return fmt.Errorf("--message é obrigatório")
+		return fmt.Errorf("--message is required")
 	}
 
 	dataHome := paths.DataHome()
@@ -237,13 +238,13 @@ func cmdCommit(args []string) error {
 
 func cmdWritePages(args []string) error {
 	fs := flag.NewFlagSet("write-pages", flag.ContinueOnError)
-	rawID := fs.Int("raw-id", 0, "id do raw_source")
-	pagesJSON := fs.String("pages-json", "", "caminho do JSON de páginas")
+	rawID := fs.Int("raw-id", 0, "raw_source id")
+	pagesJSON := fs.String("pages-json", "", "path to the pages JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *rawID == 0 || *pagesJSON == "" {
-		return fmt.Errorf("--raw-id e --pages-json são obrigatórios")
+		return fmt.Errorf("--raw-id and --pages-json are required")
 	}
 
 	data, err := os.ReadFile(*pagesJSON)
@@ -282,19 +283,19 @@ func cmdWritePages(args []string) error {
 		return err
 	}
 	if res.NeedsReview {
-		os.Exit(3) // guardrail de órfãos: agente precisa revisar
+		os.Exit(3) // orphan guardrail: an agent needs to review
 	}
 	return nil
 }
 
 func cmdResolveLinks(args []string) error {
 	fs := flag.NewFlagSet("resolve-links", flag.ContinueOnError)
-	mapPath := fs.String("map", "", "caminho do JSON {título: slug}")
+	mapPath := fs.String("map", "", "path to the JSON {title: slug}")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *mapPath == "" {
-		return fmt.Errorf("--map é obrigatório")
+		return fmt.Errorf("--map is required")
 	}
 
 	data, err := os.ReadFile(*mapPath)
@@ -303,14 +304,14 @@ func cmdResolveLinks(args []string) error {
 	}
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("map deve ser um objeto JSON {título: slug}: %w", err)
+		return fmt.Errorf("map must be a JSON object {title: slug}: %w", err)
 	}
 	mapping := map[string]string{}
 	for k, v := range raw {
 		if s, ok := v.(string); ok {
 			mapping[k] = s
 		} else {
-			mapping[k] = "" // null/outros → descartado em ResolveLinks
+			mapping[k] = "" // null/other → discarded in ResolveLinks
 		}
 	}
 
@@ -326,15 +327,15 @@ func cmdResolveLinks(args []string) error {
 
 func cmdIngest(args []string) error {
 	fs := flag.NewFlagSet("ingest", flag.ContinueOnError)
-	typeOverride := fs.String("type", "", "força o tipo de fonte (text|url|tweet)")
-	force := fs.Bool("force", false, "ingere mesmo se sha256 duplicado")
+	typeOverride := fs.String("type", "", "force the source type (text|url|tweet)")
+	force := fs.Bool("force", false, "ingest even if sha256 is duplicate")
 
 	flagArgs, positionals := splitArgs(args)
 	if err := fs.Parse(flagArgs); err != nil {
 		return err
 	}
 	if len(positionals) == 0 {
-		return fmt.Errorf("uso: vbrain ingest <path-or-url> [--type T] [--force]")
+		return fmt.Errorf("usage: vbrain ingest <path-or-url> [--type T] [--force]")
 	}
 	input := positionals[0]
 
@@ -356,8 +357,8 @@ func cmdIngest(args []string) error {
 
 func cmdRoutines(args []string) error {
 	fs := flag.NewFlagSet("routines", flag.ContinueOnError)
-	nowStr := fs.String("now", "", "ISO8601 (default: agora)")
-	dryRun := fs.Bool("dry-run", false, "não reivindica; só lista as vencidas")
+	nowStr := fs.String("now", "", "ISO8601 (default: now)")
+	dryRun := fs.Bool("dry-run", false, "don't claim; just list the due ones")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -366,7 +367,7 @@ func cmdRoutines(args []string) error {
 	if *nowStr != "" {
 		t, err := time.Parse(time.RFC3339, *nowStr)
 		if err != nil {
-			return fmt.Errorf("--now inválido: %w", err)
+			return fmt.Errorf("invalid --now: %w", err)
 		}
 		now = t.UTC()
 	}
@@ -410,16 +411,16 @@ func dueEntry(r routines.Routine, claimedAt *string) map[string]any {
 	}
 }
 
-// cmdRealtime conecta uma fonte realtime: grava o config e a página fantasma.
-// uso: vbrain realtime <gcalendar|gmail|slack> --json '<json>' | --file <path>
+// cmdRealtime connects a realtime source: writes the config and the phantom page.
+// usage: vbrain realtime <gcalendar|gmail|slack> --json '<json>' | --file <path>
 func cmdRealtime(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("uso: vbrain realtime <gcalendar|gmail|slack> --json '<json>'")
+		return fmt.Errorf("usage: vbrain realtime <gcalendar|gmail|slack> --json '<json>'")
 	}
 	source := args[0]
 	fs := flag.NewFlagSet("realtime", flag.ContinueOnError)
-	jsonStr := fs.String("json", "", "itens em JSON (array ou {key:[...]})")
-	file := fs.String("file", "", "arquivo com o JSON dos itens")
+	jsonStr := fs.String("json", "", "items as JSON (array or {key:[...]})")
+	file := fs.String("file", "", "file with the items JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -436,7 +437,7 @@ func cmdRealtime(args []string) error {
 	keys := map[string]string{"gcalendar": "calendars", "gmail": "labels", "slack": "channels"}
 	key, ok := keys[source]
 	if !ok {
-		return fmt.Errorf("fonte realtime desconhecida: %q", source)
+		return fmt.Errorf("unknown realtime source: %q", source)
 	}
 	items, err := parseRealtimeItems(raw, key)
 	if err != nil {
@@ -486,11 +487,11 @@ func cmdRealtime(args []string) error {
 	return emitJSON(out)
 }
 
-// parseRealtimeItems aceita um array JSON de objetos ou {key:[...]}.
+// parseRealtimeItems accepts a JSON array of objects or {key:[...]}.
 func parseRealtimeItems(raw []byte, key string) ([]map[string]string, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 {
-		return nil, fmt.Errorf("itens vazios; passe --json ou --file")
+		return nil, fmt.Errorf("empty items; pass --json or --file")
 	}
 	var arr []map[string]any
 	if trimmed[0] == '[' {
@@ -531,7 +532,7 @@ func withDB(fn func(*sql.DB) error) error {
 
 func cmdTags(args []string) error {
 	fs := flag.NewFlagSet("tags", flag.ContinueOnError)
-	limit := fs.Int("limit", 0, "máximo de tags (0 = todas)")
+	limit := fs.Int("limit", 0, "max tags (0 = all)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -556,10 +557,10 @@ func cmdStats(args []string) error {
 
 func cmdQueryLog(args []string) error {
 	fs := flag.NewFlagSet("query-log", flag.ContinueOnError)
-	dump := fs.Bool("dump", false, "lista as entradas")
-	prune := fs.Bool("prune", false, "apaga entradas com id <= through-id")
-	limit := fs.Int("limit", 0, "limite no dump")
-	throughID := fs.Int64("through-id", 0, "prune até este id (inclusive)")
+	dump := fs.Bool("dump", false, "list the entries")
+	prune := fs.Bool("prune", false, "delete entries with id <= through-id")
+	limit := fs.Int("limit", 0, "limit on dump")
+	throughID := fs.Int64("through-id", 0, "prune up to this id (inclusive)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -573,7 +574,7 @@ func cmdQueryLog(args []string) error {
 			return emitJSON(res)
 		case *prune:
 			if *throughID == 0 {
-				return fmt.Errorf("--prune requer --through-id K")
+				return fmt.Errorf("--prune requires --through-id K")
 			}
 			res, err := maint.QueryLogPrune(d, *throughID)
 			if err != nil {
@@ -581,7 +582,7 @@ func cmdQueryLog(args []string) error {
 			}
 			return emitJSON(res)
 		default:
-			return fmt.Errorf("uso: vbrain query-log (--dump [--limit N] | --prune --through-id K)")
+			return fmt.Errorf("usage: vbrain query-log (--dump [--limit N] | --prune --through-id K)")
 		}
 	})
 }
@@ -599,18 +600,18 @@ func cmdLinkify(args []string) error {
 
 func cmdRoutineAdd(args []string) error {
 	fs := flag.NewFlagSet("routine-add", flag.ContinueOnError)
-	slug := fs.String("slug", "", "slug da rotina")
-	description := fs.String("description", "", "descrição")
-	schedule := fs.String("schedule", "", "cron de 5 campos (opcional)")
-	prompt := fs.String("prompt", "", "prompt da rotina")
-	promptFile := fs.String("prompt-file", "", "arquivo com o prompt")
-	disabled := fs.Bool("disabled", false, "cria desabilitada")
-	replace := fs.Bool("replace", false, "substitui se já existe")
+	slug := fs.String("slug", "", "routine slug")
+	description := fs.String("description", "", "description")
+	schedule := fs.String("schedule", "", "5-field cron (optional)")
+	prompt := fs.String("prompt", "", "routine prompt")
+	promptFile := fs.String("prompt-file", "", "file with the prompt")
+	disabled := fs.Bool("disabled", false, "create disabled")
+	replace := fs.Bool("replace", false, "replace if it already exists")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if strings.TrimSpace(*slug) == "" {
-		return fmt.Errorf("--slug é obrigatório")
+		return fmt.Errorf("--slug is required")
 	}
 	p := *prompt
 	if p == "" && *promptFile != "" {
@@ -621,7 +622,7 @@ func cmdRoutineAdd(args []string) error {
 		p = string(b)
 	}
 	if strings.TrimSpace(p) == "" {
-		return fmt.Errorf("--prompt ou --prompt-file obrigatório")
+		return fmt.Errorf("--prompt or --prompt-file is required")
 	}
 	var sched *string
 	if *schedule != "" {
@@ -639,8 +640,8 @@ func cmdRoutineAdd(args []string) error {
 
 func cmdRoutineList(args []string) error {
 	fs := flag.NewFlagSet("routine-list", flag.ContinueOnError)
-	slug := fs.String("slug", "", "filtra por slug")
-	enabledOnly := fs.Bool("enabled-only", false, "só habilitadas")
+	slug := fs.String("slug", "", "filter by slug")
+	enabledOnly := fs.Bool("enabled-only", false, "only enabled")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -668,7 +669,7 @@ func cmdRoutineList(args []string) error {
 
 func cmdSeedRoutines(args []string) error {
 	fs := flag.NewFlagSet("seed-routines", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "não escreve, só reporta")
+	dryRun := fs.Bool("dry-run", false, "don't write, just report")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -682,34 +683,34 @@ func cmdSeedRoutines(args []string) error {
 	})
 }
 
-// cmdInstall é o ponto de entrada após baixar o binário da release: instala o
-// próprio binário no PATH, instala as skills embutidas globalmente, e bootstrapa
-// a base (= setup), com onboarding interativo do GitHub quando num terminal.
-// Substitui o antigo install.sh.
+// cmdInstall is the entry point after downloading the binary from the release:
+// installs the binary itself onto the PATH, installs the embedded skills
+// globally, and bootstraps the base (= setup), with interactive GitHub
+// onboarding when on a terminal. Replaces the old install.sh.
 func cmdInstall(args []string) error {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
-	binDir := fs.String("bin-dir", defaultBinDir(), "diretório no PATH p/ o binário")
+	binDir := fs.String("bin-dir", defaultBinDir(), "PATH directory for the binary")
 	github := fs.String("github", "none", "private|public|none")
-	repoName := fs.String("repo-name", "vbrain", "nome do repo no GitHub")
-	token := fs.String("token", os.Getenv("GITHUB_TOKEN"), "PAT do GitHub (ou env GITHUB_TOKEN)")
-	noPrompt := fs.Bool("no-prompt", false, "não perguntar nada (automação)")
+	repoName := fs.String("repo-name", "vbrain", "GitHub repo name")
+	token := fs.String("token", os.Getenv("GITHUB_TOKEN"), "GitHub PAT (or env GITHUB_TOKEN)")
+	noPrompt := fs.Bool("no-prompt", false, "don't ask anything (automation)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	out := map[string]any{}
 
-	// 1. binário no PATH
+	// 1. binary onto PATH
 	binPath, onPath, err := installSelf(*binDir)
 	if err != nil {
 		return err
 	}
 	out["binary"] = binPath
 	if !onPath {
-		fmt.Fprintf(os.Stderr, "→ adicione ao PATH: export PATH=\"%s:$PATH\"\n", filepath.Dir(binPath))
+		fmt.Fprintf(os.Stderr, "→ add to PATH: export PATH=\"%s:$PATH\"\n", filepath.Dir(binPath))
 	}
 
-	// 2. skills globais (~/.claude/skills) a partir do embed
+	// 2. global skills (~/.claude/skills) from the embed
 	skills, err := embeddedSkills()
 	if err != nil {
 		return err
@@ -722,25 +723,25 @@ func cmdInstall(args []string) error {
 		out["global_skills_installed"] = n
 	}
 
-	// 3. onboarding interativo (git identity + GitHub) quando num terminal
+	// 3. interactive onboarding (git identity + GitHub) when on a terminal
 	if !*noPrompt {
 		onboard(github, repoName, token)
 	}
 
-	// 4. bootstrap da base
+	// 4. bootstrap the base
 	if err := bootstrapBase(out, *github, *repoName, *token); err != nil {
 		return err
 	}
 	return emitJSON(out)
 }
 
-// cmdSetup bootstrapa só a base (dirs, CLAUDE.md, skills, git init, seed das
-// rotinas, GitHub opcional). Reutilizável; `vbrain install` o engloba.
+// cmdSetup bootstraps only the base (dirs, CLAUDE.md, skills, git init, routine
+// seeding, optional GitHub). Reusable; `vbrain install` wraps it.
 func cmdSetup(args []string) error {
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	github := fs.String("github", "none", "private|public|none")
-	repoName := fs.String("repo-name", "vbrain", "nome do repo no GitHub")
-	token := fs.String("token", os.Getenv("GITHUB_TOKEN"), "PAT do GitHub (ou env GITHUB_TOKEN)")
+	repoName := fs.String("repo-name", "vbrain", "GitHub repo name")
+	token := fs.String("token", os.Getenv("GITHUB_TOKEN"), "GitHub PAT (or env GITHUB_TOKEN)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -751,23 +752,23 @@ func cmdSetup(args []string) error {
 	return emitJSON(out)
 }
 
-// cmdUpdate auto-atualiza o binário a partir da release rolling latest.
+// cmdUpdate self-updates the binary from the rolling latest release.
 func cmdUpdate(args []string) error {
 	res, err := selfupdate.Run()
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "atualizado: %s → %s\n", res.Asset, res.Path)
+	fmt.Fprintf(os.Stderr, "updated: %s → %s\n", res.Asset, res.Path)
 	return emitJSON(res)
 }
 
-// embeddedSkills devolve o FS das skills embutidas, com raiz em .claude/skills.
+// embeddedSkills returns the FS of the embedded skills, rooted at .claude/skills.
 func embeddedSkills() (iofs.FS, error) {
 	return iofs.Sub(root.SkillsFS, ".claude/skills")
 }
 
-// bootstrapBase faz dirs + CLAUDE.md + skills na base + git init + seed + commit
-// + (opcional) criação/push do repo no GitHub. Preenche out.
+// bootstrapBase does dirs + CLAUDE.md + skills in the base + git init + seed +
+// commit + (optional) GitHub repo creation/push. Fills out.
 func bootstrapBase(out map[string]any, github, repoName, token string) error {
 	dataHome := paths.DataHome()
 	out["data_home"] = dataHome
@@ -801,7 +802,7 @@ func bootstrapBase(out map[string]any, github, repoName, token string) error {
 	}
 	out["seeded_routines"] = seed.Seeded
 
-	if _, err := git.Commit("chore: assets do agente vbrain (CLAUDE.md + skills + rotinas)", dataHome); err != nil {
+	if _, err := git.Commit("chore: vbrain agent assets (CLAUDE.md + skills + routines)", dataHome); err != nil {
 		return err
 	}
 
@@ -820,7 +821,7 @@ func bootstrapBase(out map[string]any, github, repoName, token string) error {
 				return err
 			}
 		}
-		os.Setenv("GITHUB_TOKEN", token) // go-git push usa o PAT
+		os.Setenv("GITHUB_TOKEN", token) // go-git push uses the PAT
 		if _, err := git.Push(dataHome, "origin", ""); err != nil {
 			return err
 		}
@@ -838,8 +839,8 @@ func defaultBinDir() string {
 	return filepath.Join(home, ".local", "bin")
 }
 
-// installSelf copia o binário em execução para binDir (no-op se já roda de lá).
-// Devolve o caminho final e se binDir já está no PATH.
+// installSelf copies the running binary into binDir (no-op if it already runs
+// from there). Returns the final path and whether binDir is already on the PATH.
 func installSelf(binDir string) (string, bool, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -879,25 +880,25 @@ func inPath(dir string) bool {
 	return false
 }
 
-// onboard pergunta (só em terminal) identidade git e visibilidade/PAT do GitHub.
+// onboard asks (only on a terminal) for git identity and GitHub visibility/PAT.
 func onboard(github, repoName, token *string) {
 	if !isTerminal() {
 		return
 	}
 	ensureGitIdentity()
 	if *github == "none" {
-		switch strings.ToLower(prompt("Versionar a base no GitHub? [p]rivado/[u]público/[n]enhum (p): ")) {
+		switch strings.ToLower(prompt("Version the base on GitHub? [p]rivate/[u]public/[n]one (p): ")) {
 		case "u", "public":
 			*github = "public"
 		case "n", "none":
 			*github = "none"
-		default: // "" (default) ou "p" → privado
+		default: // "" (default) or "p" → private
 			*github = "private"
 		}
 	}
 	if *github != "none" && *token == "" {
-		fmt.Fprintln(os.Stderr, "Crie um PAT (escopo 'repo'): https://github.com/settings/tokens/new?scopes=repo&description=vbrain")
-		*token = prompt("Cole o PAT (vazio pula o GitHub): ")
+		fmt.Fprintln(os.Stderr, "Create a PAT (scope 'repo'): https://github.com/settings/tokens/new?scopes=repo&description=vbrain")
+		*token = prompt("Paste the PAT (empty skips GitHub): ")
 		if *token == "" {
 			*github = "none"
 		} else if *repoName == "" {
@@ -906,13 +907,13 @@ func onboard(github, repoName, token *string) {
 	}
 }
 
-// ensureGitIdentity preenche user.name/email globais via git do sistema, se
-// presente e faltando.
+// ensureGitIdentity fills the global user.name/email via the system git, if it's
+// present and missing.
 func ensureGitIdentity() {
 	if _, err := exec.LookPath("git"); err != nil {
 		return
 	}
-	for key, q := range map[string]string{"user.name": "Seu nome para os commits: ", "user.email": "Seu email para os commits: "} {
+	for key, q := range map[string]string{"user.name": "Your name for commits: ", "user.email": "Your email for commits: "} {
 		out, _ := exec.Command("git", "config", "--global", key).Output()
 		if strings.TrimSpace(string(out)) != "" {
 			continue
@@ -936,8 +937,8 @@ func isTerminal() bool {
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
-// createGitHubRepo cria um repo via API REST do GitHub usando o PAT, e devolve
-// a URL de clone HTTPS. Idempotente-ish: trata 422 (já existe) como ok.
+// createGitHubRepo creates a repo via the GitHub REST API using the PAT, and
+// returns the HTTPS clone URL. Idempotent-ish: treats 422 (already exists) as ok.
 func createGitHubRepo(name string, private bool, token string) (string, error) {
 	body, _ := json.Marshal(map[string]any{"name": name, "private": private})
 	req, err := http.NewRequest(http.MethodPost, "https://api.github.com/user/repos", bytes.NewReader(body))
@@ -964,7 +965,7 @@ func createGitHubRepo(name string, private bool, token string) (string, error) {
 	switch res.StatusCode {
 	case 201:
 		return parsed.CloneURL, nil
-	case 422: // provavelmente já existe — monta a URL a partir do login
+	case 422: // probably already exists — build the URL from the login
 		who, err := githubLogin(token)
 		if err != nil {
 			return "", err
@@ -1003,10 +1004,10 @@ func emitJSON(v any) error {
 
 func printMarkdown(res search.Result) {
 	if len(res.Results) == 0 {
-		fmt.Printf("Nenhum resultado para `%s`.\n", res.Query)
+		fmt.Printf("No results for `%s`.\n", res.Query)
 		return
 	}
-	fmt.Printf("# Resultados para `%s`\n\n", res.Query)
+	fmt.Printf("# Results for `%s`\n\n", res.Query)
 	for i, r := range res.Results {
 		fmt.Printf("## %d. %s\n\n", i+1, r.Title)
 		fmt.Printf("**Path:** `wiki/%s`\n", r.Path)
@@ -1016,7 +1017,7 @@ func printMarkdown(res search.Result) {
 		fmt.Printf("\n%s\n\n", r.Snippet)
 	}
 	if len(res.Related) > 0 {
-		fmt.Print("## Relacionadas (grafo)\n\n")
+		fmt.Print("## Related (graph)\n\n")
 		for _, r := range res.Related {
 			fmt.Printf("- **%s** — `wiki/%s`\n", r.Title, r.Path)
 		}
