@@ -1,7 +1,7 @@
-// Package scaffold instala os "assets do agente" na base (~/vbrain) pra ela ser
-// autossuficiente em qualquer ambiente que a clone: CLAUDE.md instruindo o uso
-// das skills + cópia das skills. Porta de lib/vbrain/scaffold.rb — mas no mundo
-// Go a base NÃO carrega mais código: basta o binário `vbrain` no PATH.
+// Package scaffold installs the "agent assets" into the base (~/vbrain) so it's
+// self-sufficient in any environment that clones it: a CLAUDE.md instructing how
+// to use the skills + a copy of the skills. In the Go world the base no longer
+// carries any code: the `vbrain` binary on the PATH is enough.
 package scaffold
 
 import (
@@ -11,43 +11,43 @@ import (
 	"path/filepath"
 )
 
-// ClaudeMD é o conteúdo do CLAUDE.md escrito na base.
-const ClaudeMD = `# CLAUDE.md — base de conhecimento vbrain
+// ClaudeMD is the content of the CLAUDE.md written into the base.
+const ClaudeMD = `# CLAUDE.md — vbrain knowledge base
 
-Este repositório é a **sua base de conhecimento pessoal vbrain** e é
-autossuficiente: contém os dados versionados (` + "`raw/`, `wiki/`, `db/vbrain.sqlite3`, `config/`" + `)
-e as skills do agente em ` + "`.claude/skills/`" + `.
+This repository is **your personal vbrain knowledge base** and is
+self-sufficient: it holds the versioned data (` + "`raw/`, `wiki/`, `db/vbrain.sqlite3`, `config/`" + `)
+and the agent skills in ` + "`.claude/skills/`" + `.
 
-## Regra principal — SEMPRE use as skills vbrain
+## Main rule — ALWAYS use the vbrain skills
 
-Toda operação na base passa pelas skills (slash commands). **Nunca** edite
-` + "`wiki/`, `raw/` ou `db/`" + ` na mão, nem rode SQL direto: isso quebra o índice
-e o grafo de links.
+Every operation on the base goes through the skills (slash commands). **Never**
+edit ` + "`wiki/`, `raw/` or `db/`" + ` by hand, nor run raw SQL: that breaks the index
+and the link graph.
 
-| Quero…                                          | Use a skill                       |
+| I want to…                                      | Use the skill                     |
 |---|---|
-| Consultar a base                                | ` + "`/vbrain-query-knowledge`" + `         |
-| Adicionar conhecimento (arquivo/URL/nota)       | ` + "`/vbrain-add-knowledge`" + `           |
-| Conectar fonte realtime (calendar/gmail/slack)  | ` + "`/vbrain-add-realtime-knowledge`" + `  |
-| Criar uma rotina                                | ` + "`/vbrain-add-routine`" + `             |
-| Rodar as rotinas (watch loop)                   | ` + "`/vbrain-routine`" + `                 |
+| Query the base                                  | ` + "`/vbrain-query-knowledge`" + `         |
+| Add knowledge (file/URL/note)                   | ` + "`/vbrain-add-knowledge`" + `           |
+| Connect a realtime source (calendar/gmail/slack)| ` + "`/vbrain-add-realtime-knowledge`" + `  |
+| Create a routine                                | ` + "`/vbrain-add-routine`" + `             |
+| Run the routines (watch loop)                   | ` + "`/vbrain-routine`" + `                 |
 
-## Pré-requisitos
+## Prerequisites
 
-As skills são determinísticas e chamam o binário **` + "`vbrain`" + `**, que deve estar
-no PATH (instale via ` + "`install.sh`" + ` do repositório de código). Não é preciso
-Ruby nem instalar gems: o ` + "`vbrain`" + ` é um binário único, autocontido.
+The skills are deterministic and call the **` + "`vbrain`" + `** binary, which must be
+on the PATH (install with ` + "`vbrain install`" + `). No Ruby and no gem install
+needed: ` + "`vbrain`" + ` is a single, self-contained binary.
 
-## Por quê (arquitetura)
+## Why (architecture)
 
-Wiki em markdown é a fonte da verdade; o SQLite (` + "`db/vbrain.sqlite3`" + `) é
-índice derivado — descartável (dá pra apagar e reconstruir com
-` + "`vbrain reindex`" + `), mas versionado por conveniência. O LLM só entra pro
-que exige julgamento (chunkar, sintetizar páginas).
+Markdown wiki is the source of truth; SQLite (` + "`db/vbrain.sqlite3`" + `) is a
+derived index — disposable (you can delete it and rebuild with
+` + "`vbrain reindex`" + `), but versioned for convenience. The LLM only steps in for
+what needs judgment (chunking, synthesizing pages).
 `
 
-// WriteClaudeMD escreve o CLAUDE.md se ainda não existir (não clobbera
-// customização do usuário). Retorna true se escreveu.
+// WriteClaudeMD writes CLAUDE.md if it doesn't exist yet (does not clobber a
+// user's customization). Returns true if it wrote.
 func WriteClaudeMD(dir string) (bool, error) {
 	path := filepath.Join(dir, "CLAUDE.md")
 	if _, err := os.Stat(path); err == nil {
@@ -62,10 +62,10 @@ func WriteClaudeMD(dir string) (bool, error) {
 	return true, nil
 }
 
-// InstallSkills copia cada skill (subdiretório de skills, um fs.FS — tipicamente
-// o embed.FS do binário, com fs.Sub na raiz das skills) para
-// <dir>/.claude/skills/. Idempotente: remove o destino de cada skill antes de
-// copiar. Retorna o número de skills instaladas.
+// InstallSkills copies each skill (a subdirectory of skills, an fs.FS —
+// typically the binary's embed.FS, fs.Sub'd at the skills root) into
+// <dir>/.claude/skills/. Idempotent: removes each skill's target before copying.
+// Returns the number of skills installed.
 func InstallSkills(dir string, skills fs.FS) (int, error) {
 	entries, err := fs.ReadDir(skills, ".")
 	if err != nil {
@@ -95,7 +95,7 @@ func InstallSkills(dir string, skills fs.FS) (int, error) {
 	return count, nil
 }
 
-// copyTreeFS copia srcDir (dentro de fsys) para dstDir no disco.
+// copyTreeFS copies srcDir (within fsys) to dstDir on disk.
 func copyTreeFS(fsys fs.FS, srcDir, dstDir string) error {
 	return fs.WalkDir(fsys, srcDir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {

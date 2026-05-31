@@ -1,99 +1,101 @@
 # vbrain
 
-Base de conhecimento pessoal — inspirada em
-[akitaonrails/ai-memory](https://github.com/akitaonrails/ai-memory), reduzida
-a Claude Code skills + um binário Go determinístico (`vbrain`) + SQLite FTS5.
+Personal knowledge base — inspired by
+[akitaonrails/ai-memory](https://github.com/akitaonrails/ai-memory), reduced to
+Claude Code skills + a single deterministic Go binary (`vbrain`) + SQLite FTS5.
 
-A premissa: **wiki em markdown é a fonte da verdade; o SQLite é índice
-derivado — descartável (dá pra apagar e reconstruir com `vbrain reindex`), mas
-versionado junto da base por conveniência (clone/pull já trazem o índice
-pronto); o LLM só entra para o que exige julgamento (chunkar, sintetizar
-páginas)**. Todo o resto é Go testado.
+The premise: **markdown wiki is the source of truth; SQLite is a derived index
+— disposable (you can delete it and rebuild with `vbrain reindex`), but
+versioned alongside the base for convenience (clone/pull already bring the index
+ready); the LLM only steps in for what needs judgment (chunking, synthesizing
+pages)**. Everything else is tested Go.
 
-> **Migrado de Ruby para Go.** O núcleo determinístico era Ruby; hoje é um
-> binário único `vbrain` (sem runtime pra instalar): SQLite via
-> `modernc.org/sqlite` (puro-Go, FTS5 embutido) e git via go-git, com fallback
-> pro git do sistema quando presente.
+> **Migrated from Ruby to Go.** The deterministic core used to be Ruby; today
+> it's a single `vbrain` binary (no runtime to install): SQLite via
+> `modernc.org/sqlite` (pure-Go, FTS5 embedded) and git via go-git, falling back
+> to the system git when present.
 
-## Arquitetura
+## Architecture
 
-### Separação código vs. dados
+### Code vs. data separation
 
-| Diretório                   | O que é                                                      | Versionado                    |
+| Directory                   | What it is                                                | Versioned                     |
 |---|---|---|
-| Este repo                   | **Código** (Go), skills, testes (canônico)                   | git aqui                       |
-| `~/vbrain/` (`VBRAIN_HOME`)  | **Sua base** — `raw/`, `wiki/`, `config/`, `db/vbrain.sqlite3` | git próprio, criado on demand |
+| This repo                   | **Code** (Go), skills, tests (canonical)                   | git here                       |
+| `~/vbrain/` (`VBRAIN_HOME`)  | **Your base** — `raw/`, `wiki/`, `config/`, `db/vbrain.sqlite3` | its own git, created on demand |
 
-O `install.sh` builda o binário `vbrain` num dir do PATH (`~/.local/bin` por
-padrão), instala as skills globalmente (`~/.claude/skills/`) e bootstrapa a
-base via `vbrain setup` (CLAUDE.md + skills + git init + rotinas). Como as
-skills chamam o binário `vbrain` (no PATH), a base **não copia código** — basta
-o binário. Roda em qualquer ambiente que clone a base, sem Ruby nem gems.
+`vbrain install` puts the binary on the PATH (`~/.local/bin` by default),
+installs the skills globally (`~/.claude/skills/`), and bootstraps the base
+(`CLAUDE.md` + skills + git init + routines). Because the skills call the
+`vbrain` binary (on the PATH), the base **does not copy any code** — the binary
+is enough. It runs in any environment that clones the base, with no Ruby or gems.
 
-A base é resolvida nesta ordem: (1) `VBRAIN_HOME`, se setado; (2) senão, se o
-diretório atual é uma base (carrega `wiki/`, como no cloud onde repo == base),
-usa-o — assim as skills/sub-agentes acham os dados sem herdar `VBRAIN_HOME` do
-shell; (3) senão, `~/vbrain`. A wiki vira um repo git separado no `vbrain setup`
-— privado, público ou só-local conforme escolha do usuário.
+The base is resolved in this order: (1) `VBRAIN_HOME`, if set; (2) otherwise, if
+the current directory is a base (it carries `wiki/`, as in the cloud where repo
+== base), use it — so skills/sub-agents find the data without inheriting
+`VBRAIN_HOME` from the shell; (3) otherwise, `~/vbrain`. The wiki becomes a
+separate git repo during `vbrain install`/`setup` — private, public, or
+local-only depending on the user's choice.
 
-### Layout da base (`~/vbrain/`)
+### Base layout (`~/vbrain/`)
 
 ```
 ~/vbrain/
-├── raw/                 # originais imutáveis (audit log)
-│   └── .tmp/            # intermediários do pipeline (extracted-N.txt, pages-N.json)
-├── wiki/                # markdown com frontmatter YAML — fonte da verdade
-│   ├── <slug>.md        # páginas de conhecimento, espaço plano; [[wikilinks]]
-│   └── _realtime/       # kind: realtime — páginas fantasma que disparam handlers MCP
+├── raw/                 # immutable originals (audit log)
+│   └── .tmp/            # pipeline intermediates (extracted-N.txt, pages-N.json)
+├── wiki/                # markdown with YAML frontmatter — source of truth
+│   ├── <slug>.md        # knowledge pages, flat space; connected by [[wikilinks]]
+│   └── _realtime/       # kind: realtime — phantom pages that trigger MCP handlers
 ├── config/
-│   ├── realtime/        # config das fontes realtime (gcalendar.yml etc.)
+│   ├── realtime/        # realtime source config (gcalendar.yml etc.)
 │   └── routines/routines.yml
-└── db/vbrain.sqlite3    # índice — pages + virtual pages_fts (FTS5) + links (grafo)
+└── db/vbrain.sqlite3    # index — pages + virtual pages_fts (FTS5) + links (graph)
 ```
 
-`db/vbrain.sqlite3` **é versionado** (conveniência); continua descartável —
-apagar `db/` e rodar `vbrain reindex` reconstrói tudo a partir de `wiki/`,
-incluindo o grafo de `[[wikilinks]]`. Não existe `wiki/index.md` nem pastas por
-tipo: a estrutura é o grafo de links + o SQLite derivado.
+`db/vbrain.sqlite3` **is versioned** (convenience); it stays disposable —
+deleting `db/` and running `vbrain reindex` rebuilds everything from `wiki/`,
+including the `[[wikilink]]` graph. There is no `wiki/index.md` and no
+per-type folders: the structure is the link graph + the derived SQLite.
 
-### O binário `vbrain`
+### The `vbrain` binary
 
-JSON no stdout (lido pelas skills), texto humano no stderr. Subcomandos:
+JSON on stdout (read by the skills), human-readable text on stderr. Subcommands:
 
-| Subcomando | O que faz |
+| Subcommand | What it does |
 |---|---|
-| `vbrain ingest <path\|url>`  | detecta fonte, copia p/ `raw/`, dedup por sha256, extrai |
-| `vbrain write-pages --raw-id N --pages-json P` | única escrita em `wiki/` (staging atômico + guardrail de órfãos) |
-| `vbrain reindex`             | reconstrói `pages`/`pages_fts`/`links` a partir de `wiki/` |
-| `vbrain query "<q>"`         | FTS5 + snippet + vizinhos do grafo |
-| `vbrain resolve-links --map M` / `vbrain linkify` | resolve/converte wikilinks |
-| `vbrain commit [--no-push]`  | commit + push idempotente (go-git ou git do sistema) |
-| `vbrain routines [--dry-run]` / `vbrain routine-add` / `vbrain routine-list` | agendamento (cron) |
-| `vbrain realtime <gcalendar\|gmail\|slack> --json …` | conecta fonte realtime |
-| `vbrain tags` / `vbrain stats` / `vbrain query-log` | insights/manutenção |
-| `vbrain setup` / `vbrain seed-routines` | bootstrap da base |
+| `vbrain ingest <path\|url>`  | detect source, copy to `raw/`, dedup by sha256, extract |
+| `vbrain write-pages --raw-id N --pages-json P` | the only writer into `wiki/` (atomic staging + orphan guardrail) |
+| `vbrain reindex`             | rebuild `pages`/`pages_fts`/`links` from `wiki/` |
+| `vbrain query "<q>"`         | FTS5 + snippet + graph neighbors |
+| `vbrain resolve-links --map M` / `vbrain linkify` | resolve/convert wikilinks |
+| `vbrain commit [--no-push]`  | idempotent commit + push (go-git or system git) |
+| `vbrain routines [--dry-run]` / `vbrain routine-add` / `vbrain routine-list` | scheduling (cron) |
+| `vbrain realtime <gcalendar\|gmail\|slack> --json …` | connect a realtime source |
+| `vbrain tags` / `vbrain stats` / `vbrain query-log` | insights/maintenance |
+| `vbrain install` / `vbrain setup` / `vbrain seed-routines` | base bootstrap |
+| `vbrain update` | self-update from the latest release |
 
-### Skills (interface com o Claude Code)
+### Skills (Claude Code interface)
 
-| Slash command                       | O que faz |
+| Slash command                       | What it does |
 |---|---|
-| `/vbrain-add-knowledge <path\|url>` | Ingere → `raw/` → chunker LLM → wiki-writer LLM → `vbrain write-pages` → reindex → commit |
-| `/vbrain-query-knowledge <query>`   | `vbrain query`; páginas `kind: realtime` disparam handler MCP em vez de snippet |
-| `/vbrain-add-realtime-knowledge`    | Conecta fonte realtime (Google Calendar/Gmail/Slack via MCP) e cria página fantasma |
-| `/vbrain-add-routine`               | Adiciona rotina (slug, descrição, cron, prompt) |
-| `/vbrain-routine [slug\|status]`    | Watch: claim de rotinas vencidas via `vbrain routines`, dispatch paralelo, re-arma `/loop 15m` |
+| `/vbrain-add-knowledge <path\|url>` | Ingest → `raw/` → LLM chunker → LLM wiki-writer → `vbrain write-pages` → reindex → commit |
+| `/vbrain-query-knowledge <query>`   | `vbrain query`; `kind: realtime` pages trigger an MCP handler instead of a snippet |
+| `/vbrain-add-realtime-knowledge`    | Connect a realtime source (Google Calendar/Gmail/Slack via MCP) and create a phantom page |
+| `/vbrain-add-routine`               | Add a routine (slug, description, cron, prompt) |
+| `/vbrain-routine [slug\|status]`    | Watch: claim due routines via `vbrain routines`, parallel dispatch, re-arm `/loop 15m` |
 
-### Fontes (`internal/sources/`)
+### Sources (`internal/sources/`)
 
-`sources.Registry` é probada em ordem por `sources.Detect`:
+`sources.Registry` is probed in order by `sources.Detect`:
 
-| Source     | Detecção                                    | Extração |
+| Source     | Detection                                   | Extraction |
 |---|---|---|
-| Twitter    | URL `twitter.com\|x.com/<user>/status/<id>` | `cdn.syndication.twimg.com` (HTTP+JSON); corpo de X Article via Playwright é best-effort (degrada p/ preview) |
-| URL        | Outras URLs http(s)                         | Jina Reader (`r.jina.ai`) — markdown limpo |
-| Text       | `.md`, `.txt`, sem extensão + UTF-8         | passthrough |
+| Twitter    | URL `twitter.com\|x.com/<user>/status/<id>` | `cdn.syndication.twimg.com` (HTTP+JSON); the X Article body via headless Chrome is best-effort (degrades to preview) |
+| URL        | Other http(s) URLs                          | Jina Reader (`r.jina.ai`) — clean markdown |
+| Text       | `.md`, `.txt`, extensionless + UTF-8        | passthrough |
 
-### Schema do índice (`internal/db`)
+### Index schema (`internal/db`)
 
 ```sql
 raw_sources(id, path UNIQUE, original_filename, source_type, sha256 UNIQUE, ingested_at)
@@ -102,76 +104,88 @@ pages_fts(title, body, tags)              -- virtual FTS5, content='pages'
   tokenize: unicode61 tokenchars '/_-'
 ```
 
-Triggers `pages_ai`/`pages_ad`/`pages_au` espelham toda escrita em `pages` pra
-`pages_fts`. `vbrain query` normaliza a query (escapa `:`, aspas, parênteses)
-antes do FTS5.
+Triggers `pages_ai`/`pages_ad`/`pages_au` mirror every write to `pages` into
+`pages_fts`. `vbrain query` normalizes the query (escapes `:`, quotes,
+parentheses) before FTS5.
 
-### Realtime e rotinas
+### Realtime and routines
 
-Páginas `kind: realtime` carregam só keywords (pra casar no FTS5) + metadados;
-a config real fica em `config/realtime/<source>.yml`. Quando `query-knowledge`
-acha uma, dispara o handler MCP (`list_events`/`search_threads`/Slack search) em
-vez do snippet.
+`kind: realtime` pages carry only keywords (to match in FTS5) + metadata; the
+real config lives in `config/realtime/<source>.yml`. When `query-knowledge` hits
+one, it triggers the MCP handler (`list_events`/`search_threads`/Slack search)
+instead of the snippet.
 
-Rotinas são prompts nomeados com cron em `config/routines/routines.yml`;
-`next_run` é computado deterministicamente (robfig/cron). Execução é
-**at-most-once** (avança o `next_run` antes de rodar). A rotina-padrão `dream`
-(auto-melhoria noturna) é semeada no setup.
+Routines are named prompts with a cron schedule in
+`config/routines/routines.yml`; `next_run` is computed deterministically
+(robfig/cron). Execution is **at-most-once** (advances `next_run` before
+running). The default `dream` routine (nightly self-improvement) is seeded at
+setup.
 
-## Diretórios deste repo
+## Repo layout
 
 ```
 vbrain/
-├── cmd/vbrain/          # CLI (subcomandos, JSON no stdout)
-├── internal/            # núcleo determinístico (paths, db, page, slug, ftsquery,
+├── cmd/vbrain/          # CLI (subcommands, JSON on stdout)
+├── internal/            # deterministic core (paths, db, page, slug, ftsquery,
 │                        #   links, sources, index, search, writepages, ingest,
-│                        #   resolvelinks, git, routines, realtime, maint, scaffold)
-├── .claude/skills/      # SKILL.md + prompts dos subagentes (embutidos no binário via go:embed)
-└── embed.go             # //go:embed das skills pra o `vbrain install` se bastar
+│                        #   resolvelinks, git, routines, realtime, maint,
+│                        #   scaffold, selfupdate)
+├── .claude/skills/      # SKILL.md + sub-agent prompts (embedded in the binary via go:embed)
+└── embed.go             # //go:embed of the skills so `vbrain install` is self-sufficient
 ```
 
-Todo pacote em `internal/` tem teste `go test` correspondente. Os testes isolam
-dados em tmpdir via `VBRAIN_HOME` / dirs explícitos.
+Every package under `internal/` has a corresponding `go test`. Tests isolate
+data in a tmpdir via `VBRAIN_HOME` / explicit dirs.
 
 ## Setup
 
-1. **Baixe o binário** da release `latest` (asset da sua plataforma — ex.:
-   `vbrain-linux-amd64`), torne-o executável.
-2. **Rode `vbrain install`** — coloca o binário no PATH (`~/.local/bin`),
-   instala as skills (embutidas no binário) em `~/.claude/skills`, bootstrapa a
-   base (`CLAUDE.md` + skills + git init + rotina `dream`) e faz o onboarding do
-   GitHub (identidade git + PAT + cria o repo) num terminal.
+1. **Download the binary** from the `latest` release (the asset for your
+   platform — e.g. `vbrain-linux-amd64`), make it executable.
+2. **Run `vbrain install`** — puts the binary on the PATH (`~/.local/bin`),
+   installs the skills (embedded in the binary) into `~/.claude/skills`,
+   bootstraps the base (`CLAUDE.md` + skills + git init + the `dream` routine),
+   and runs the GitHub onboarding (git identity + PAT + repo creation) when on a
+   terminal.
 
 ```bash
-# ex. Linux x86-64
+# e.g. Linux x86-64
 curl -L -o vbrain https://github.com/virtual360-io/vbrain/releases/download/latest/vbrain-linux-amd64
 chmod +x vbrain
-./vbrain install        # ou: ./vbrain install --github private --no-prompt
+./vbrain install        # or: ./vbrain install --github private --no-prompt
 ```
 
-Não precisa de Ruby, gems, nem clonar o repo — o `vbrain` é um binário único e
-autocontido (skills inclusas). `VBRAIN_HOME` pode ser exportado pra mover a base.
+Release assets per platform: `vbrain-linux-amd64`, `vbrain-linux-arm64`,
+`vbrain-darwin-amd64` (Intel Mac), `vbrain-darwin-arm64` (Apple Silicon),
+`vbrain-windows-amd64.exe`.
 
-### Atualizar
+No Ruby, no gems, no need to clone the repo — `vbrain` is a single,
+self-contained binary (skills included). `VBRAIN_HOME` can be exported to move
+the base.
+
+> **macOS note:** the binary is not signed/notarized, so Gatekeeper may block
+> the first run. If so, clear the quarantine flag: `xattr -d com.apple.quarantine vbrain`
+> (or System Settings → Privacy & Security → "Allow anyway").
+
+### Update
 
 ```bash
-vbrain update           # baixa o binário mais recente da release (verifica SHA256)
+vbrain update           # downloads the latest release binary (verifies SHA256)
 ```
 
-## Testes
+## Tests
 
 ```bash
 go test ./...
 ```
 
-## Verificação manual
+## Manual verification
 
 ```bash
-printf "# Postgres\n\nUse REPLICA IDENTITY FULL p/ logical replication.\n" > /tmp/pg.md
+printf "# Postgres\n\nUse REPLICA IDENTITY FULL for logical replication.\n" > /tmp/pg.md
 vbrain ingest /tmp/pg.md
-# (chunker/wiki-writer rodam via skill; ou monte um pages.json e:)
+# (chunker/wiki-writer run via the skill; or build a pages.json and:)
 vbrain reindex
 vbrain query "replica identity" --format markdown
-vbrain query "postgres:logical"   # ':' não quebra FTS5
+vbrain query "postgres:logical"   # ':' doesn't break FTS5
 vbrain stats
 ```

@@ -1,151 +1,149 @@
 # CLAUDE.md — vbrain
 
-Estas regras valem para qualquer tarefa neste repo, salvo override explícito.
-Bias: cautela > velocidade em qualquer coisa não-trivial. Use julgamento em
-tarefas triviais.
+These rules apply to any task in this repo, unless explicitly overridden.
+Bias: caution > speed for anything non-trivial. Use judgment on trivial tasks.
 
-Contexto curto: este repo é uma base de conhecimento pessoal estilo ai-memory.
-**Wiki em markdown é a fonte da verdade; o SQLite é índice derivado —
-descartável (dá pra apagar e reconstruir com `vbrain reindex`), mas versionado
-junto da base por conveniência; o LLM só entra para o que exige julgamento
-(chunkar, sintetizar páginas)**. Veja `README.md` para a arquitetura completa.
+Short context: this repo is a personal knowledge base in the ai-memory style.
+**Markdown wiki is the source of truth; SQLite is a derived index — disposable
+(you can delete it and rebuild with `vbrain reindex`), but versioned alongside
+the base for convenience; the LLM only steps in for what needs judgment
+(chunking, synthesizing pages)**. See `README.md` for the full architecture.
 
-Stack: **Go**. O núcleo determinístico é um binário único `vbrain` — código em
-`cmd/vbrain/` (subcomandos do CLI) + `internal/<pkg>` (lógica), testes `go test`
-1:1 por pacote. SQLite via `modernc.org/sqlite` (puro-Go, FTS5 embutido); git
-via go-git, com fallback pro git do sistema quando presente. As skills em
-`.claude/skills/` chamam `vbrain <subcomando>` (binário no PATH).
+Stack: **Go**. The deterministic core is a single `vbrain` binary — code in
+`cmd/vbrain/` (CLI subcommands) + `internal/<pkg>` (logic), `go test` 1:1 per
+package. SQLite via `modernc.org/sqlite` (pure-Go, FTS5 embedded); git via
+go-git, falling back to the system git when present. Skills in `.claude/skills/`
+call `vbrain <subcommand>` (binary on the PATH).
 
-## Regra 1 — Think Before Coding
+## Rule 1 — Think Before Coding
 
-Declare suposições explicitamente. Se incerto, pergunte em vez de chutar.
-Apresente múltiplas interpretações quando houver ambiguidade.
-Empurre de volta quando existir um caminho mais simples.
-Pare quando estiver confuso. Nomeie o que está pouco claro.
+State assumptions explicitly. If unsure, ask instead of guessing.
+Present multiple interpretations when there's ambiguity.
+Push back when there's a simpler path.
+Stop when confused. Name what's unclear.
 
-No vbrain: antes de tocar em `internal/db` (`SchemaSQL`) ou no schema, declare o
-que você acha que o índice está fazendo hoje e por quê — schema é o ponto mais
-caro de errar.
+In vbrain: before touching `internal/db` (`SchemaSQL`) or the schema, state what
+you think the index is doing today and why — the schema is the most expensive
+place to get wrong.
 
-## Regra 2 — Simplicity First
+## Rule 2 — Simplicity First
 
-Código mínimo que resolve o problema. Nada especulativo.
-Sem features além do pedido. Sem abstrações para código de uso único.
-Teste: um sênior chamaria isso de overengenharia? Se sim, simplifique.
+Minimal code that solves the problem. Nothing speculative.
+No features beyond what's asked. No abstractions for single-use code.
+Test: would a senior call this overengineering? If so, simplify.
 
-No vbrain: este repo segue o ai-memory e é deliberadamente raso. Skills + Go
-+ SQLite, ponto. Não introduza camadas (cache, fila, ORM, DSL) sem pedido
-explícito.
+In vbrain: this repo follows ai-memory and is deliberately shallow. Skills + Go
++ SQLite, period. Don't introduce layers (cache, queue, ORM, DSL) without an
+explicit request.
 
-## Regra 3 — Surgical Changes
+## Rule 3 — Surgical Changes
 
-Toque só no que precisa. Limpe só a sua bagunça.
-Não "melhore" código adjacente, comentários, formatação.
-Não refatore o que não está quebrado. Combine com o estilo existente.
+Touch only what you need. Clean up only your own mess.
+Don't "improve" adjacent code, comments, formatting.
+Don't refactor what isn't broken. Match the existing style.
 
-No vbrain: bug em `sources.Twitter` não justifica reformatar `sources.URL`.
+In vbrain: a bug in `sources.Twitter` doesn't justify reformatting `sources.URL`.
 
-## Regra 4 — Goal-Driven Execution
+## Rule 4 — Goal-Driven Execution
 
-Defina critério de sucesso. Itere até verificar.
-Não siga passos — defina sucesso e itere.
-Critérios de sucesso fortes te deixam iterar sozinho.
+Define success criteria. Iterate until verified.
+Don't follow steps — define success and iterate.
+Strong success criteria let you iterate on your own.
 
-No vbrain: "ingest de tweet com link funciona" significa `go test ./...` verde +
-`/vbrain-add-knowledge <url>` produzindo páginas em `wiki/` cujos `path`
-aparecem em `vbrain query`. Não pare antes desses três.
+In vbrain: "tweet-with-link ingest works" means `go test ./...` green +
+`/vbrain-add-knowledge <url>` producing pages in `wiki/` whose `path` shows up in
+`vbrain query`. Don't stop before those three.
 
-## Regra 5 — Use o modelo só para julgamento
+## Rule 5 — Use the model only for judgment
 
-Use o LLM para: classificação, draft, sumarização, extração.
-NÃO use o LLM para: roteamento, retries, transformações determinísticas.
-Se código pode responder, código responde.
+Use the LLM for: classification, drafting, summarization, extraction.
+Do NOT use the LLM for: routing, retries, deterministic transforms.
+If code can answer, code answers.
 
-No vbrain isso é regra de arquitetura, não dica: chunker e wiki-writer são
-subagentes porque exigem julgamento; `internal/ingest`, `internal/writepages`,
-`internal/index`, `internal/search` (expostos pelos subcomandos `vbrain ingest`,
-`write-pages`, `reindex`, `query`) são Go determinístico com `go test` 1:1.
-Detectar source_type, normalizar query FTS5, escrever frontmatter, montar
-SQL — tudo Go. Nunca delegue ao subagente o que dá pra fazer em código.
+In vbrain this is an architectural rule, not a tip: chunker and wiki-writer are
+sub-agents because they need judgment; `internal/ingest`, `internal/writepages`,
+`internal/index`, `internal/search` (exposed by the `vbrain ingest`,
+`write-pages`, `reindex`, `query` subcommands) are deterministic Go with `go
+test` 1:1. Detecting source_type, normalizing the FTS5 query, writing
+frontmatter, building SQL — all Go. Never delegate to a sub-agent what code can
+do.
 
-## Regra 6 — Token budgets não são sugestão
+## Rule 6 — Token budgets are not a suggestion
 
-Por tarefa: 4.000 tokens. Por sessão: 30.000 tokens.
-Se chegando perto do limite, sumarize e recomece.
-Surface o estouro. Não estoure em silêncio.
+Per task: 4,000 tokens. Per session: 30,000 tokens.
+If you're nearing the limit, summarize and restart.
+Surface the overflow. Don't blow past it silently.
 
-No vbrain: prompts de chunker e wiki-writer ficam em
-`.claude/skills/vbrain-add-knowledge/prompts/` — se inflar, refatore o prompt
-antes de aumentar o budget.
+In vbrain: chunker and wiki-writer prompts live in
+`.claude/skills/vbrain-add-knowledge/prompts/` — if they bloat, refactor the
+prompt before raising the budget.
 
-## Regra 7 — Conflitos: escolha, não misture
+## Rule 7 — Conflicts: pick, don't mix
 
-Se dois padrões se contradizem, escolha um (mais recente / mais testado).
-Explique por quê. Sinalize o outro para limpeza.
-Não misture padrões conflitantes.
+If two patterns contradict, pick one (most recent / best tested).
+Explain why. Flag the other for cleanup.
+Don't mix conflicting patterns.
 
-No vbrain: se uma fonte em `internal/sources` faz X e outra faz Y para o mesmo
-problema, não invente Z combinando os dois — pegue o padrão coberto por mais
-testes.
+In vbrain: if one source in `internal/sources` does X and another does Y for the
+same problem, don't invent Z combining the two — take the pattern covered by
+more tests.
 
-## Regra 8 — Leia antes de escrever
+## Rule 8 — Read before writing
 
-Antes de adicionar código, leia exports, callers imediatos, utilitários
-compartilhados. "Parece ortogonal" é perigoso. Se não entende por que o
-código está estruturado de um jeito, pergunte.
+Before adding code, read exports, immediate callers, shared utilities.
+"Looks orthogonal" is dangerous. If you don't understand why the code is
+structured a certain way, ask.
 
-No vbrain antes de editar uma fonte em `internal/sources`: leia a interface
-`Source`/`Ingestable`, o `Registry` (dispatcher em `sources.go`) e o
-`*_test.go` correspondente. Antes de mexer em `internal/page` ou `internal/db`:
-veja quem chama (`internal/writepages`, `internal/index`).
+In vbrain, before editing a source in `internal/sources`: read the
+`Source`/`Ingestable` interface, the `Registry` (dispatcher in `sources.go`),
+and the corresponding `*_test.go`. Before touching `internal/page` or
+`internal/db`: check the callers (`internal/writepages`, `internal/index`).
 
-## Regra 9 — Testes verificam intenção, não só comportamento
+## Rule 9 — Tests verify intent, not just behavior
 
-Testes precisam codificar o PORQUÊ do comportamento importar, não só o quê.
-Um teste que não pode falhar quando a regra de negócio muda está errado.
+Tests must encode WHY the behavior matters, not just what.
+A test that can't fail when the business rule changes is wrong.
 
-No vbrain: todo pacote determinístico em `internal/` tem `*_test.go`
-correspondente. Isso é **regra dura** — sem teste o código não entra. Isole
-dados nos testes com `t.Setenv("VBRAIN_HOME", t.TempDir())` (ou passe dirs
-explícitos), nunca tocando a base real.
+In vbrain: every deterministic package under `internal/` has a corresponding
+`*_test.go`. This is a **hard rule** — no code lands without a test. Isolate
+test data with `t.Setenv("VBRAIN_HOME", t.TempDir())` (or pass explicit dirs),
+never touching the real base.
 
-## Regra 10 — Checkpoint após cada passo significativo
+## Rule 10 — Checkpoint after each significant step
 
-Sumarize o que foi feito, o que está verificado, o que falta.
-Não continue de um estado que você não consegue descrever de volta.
-Se perder o fio, pare e re-enuncie.
+Summarize what was done, what's verified, what's left.
+Don't continue from a state you can't describe back.
+If you lose the thread, stop and restate.
 
-No vbrain: pipeline de ingest tem 7 passos — depois de cada um diga o que
-saiu (path, raw_id, count) antes de partir pro próximo. Não chegue em
-`vbrain commit` sem ter declarado quantas páginas o `vbrain write-pages`
-produziu.
+In vbrain: the ingest pipeline has 7 steps — after each one, say what came out
+(path, raw_id, count) before moving to the next. Don't reach `vbrain commit`
+without having stated how many pages `vbrain write-pages` produced.
 
-## Regra 11 — Combine com as convenções do codebase, mesmo discordando
+## Rule 11 — Match the codebase conventions, even when you disagree
 
-Conformidade > gosto, dentro do codebase.
-Se você acha de verdade que uma convenção é nociva, sinalize. Não forke em
-silêncio.
+Conformance > taste, within the codebase.
+If you genuinely think a convention is harmful, flag it. Don't fork silently.
 
-No vbrain há convenções que parecem opinativas mas são intencionais:
+In vbrain there are conventions that look opinionated but are intentional:
 
-- Os subcomandos do `vbrain` retornam **JSON** no stdout (lido pelas skills) e
-  texto humano no stderr. Não inverta.
-- Wiki é escrita **só** por `vbrain write-pages` (`internal/writepages`).
-  Skills nunca escrevem markdown direto em `wiki/`.
-- `raw/` é **imutável** depois de gravado. Se o conteúdo precisa mudar,
-  reingere.
-- Não existe `wiki/index.md`. O índice é o SQLite. Não tente recriar um.
-- O SQLite (`db/vbrain.sqlite3`) **é versionado** (não está no `.gitignore`):
-  índice derivado e descartável, mas commitado por conveniência. Apagar `db/`
-  + `vbrain reindex` reconstrói tudo. Não re-adicione `/db/` ao ignore.
+- The `vbrain` subcommands return **JSON** on stdout (read by the skills) and
+  human-readable text on stderr. Don't invert this.
+- The wiki is written **only** by `vbrain write-pages` (`internal/writepages`).
+  Skills never write markdown directly into `wiki/`.
+- `raw/` is **immutable** once written. If the content needs to change,
+  re-ingest.
+- There is no `wiki/index.md`. The index is SQLite. Don't try to recreate one.
+- SQLite (`db/vbrain.sqlite3`) **is versioned** (not in `.gitignore`): a derived,
+  disposable index, but committed for convenience. Deleting `db/` +
+  `vbrain reindex` rebuilds everything. Don't re-add `/db/` to the ignore list.
 
-## Regra 12 — Falhe alto
+## Rule 12 — Fail loud
 
-"Concluído" está errado se algo foi pulado em silêncio.
-"Testes passam" está errado se algum foi skipado.
-Padrão: surface incerteza, não esconda.
+"Done" is wrong if something was silently skipped.
+"Tests pass" is wrong if any was skipped.
+Default: surface uncertainty, don't hide it.
 
-No vbrain: se o chunker retornou 0 páginas, **reporte** "nenhuma página
-criada, raw commitado como audit log" — não rode `vbrain stats` e mostre só os
-totais como se tudo tivesse dado certo. Se um subagente fabricou conteúdo
-sem grounding, sinalize ao usuário antes de persistir.
+In vbrain: if the chunker returned 0 pages, **report** "no page created, raw
+committed as an audit log" — don't run `vbrain stats` and show only the totals
+as if everything worked. If a sub-agent fabricated content without grounding,
+flag it to the user before persisting.

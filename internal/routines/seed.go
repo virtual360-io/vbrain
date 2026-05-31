@@ -8,7 +8,7 @@ import (
 //go:embed dream.prompt.md
 var dreamPrompt string
 
-// defaultRoutine descreve uma rotina semeada por padrão no setup.
+// defaultRoutine describes a routine seeded by default at setup.
 type defaultRoutine struct {
 	slug, description, schedule, prompt string
 	enabled                             bool
@@ -17,21 +17,21 @@ type defaultRoutine struct {
 var defaults = []defaultRoutine{
 	{
 		slug:        "dream",
-		description: "Auto-melhoria noturna: lê o query_log e reorganiza a wiki pra responder melhor.",
+		description: "Nightly self-improvement: reads the query_log and reorganizes the wiki to answer better.",
 		schedule:    "0 3 * * *",
 		enabled:     true,
 		prompt:      dreamPrompt,
 	},
 }
 
-// SeedResult resume o que o seed fez.
+// SeedResult summarizes what the seed did.
 type SeedResult struct {
 	Seeded  []string `json:"seeded"`
 	Skipped []string `json:"skipped"`
 }
 
-// SeedDefaults adiciona cada rotina-padrão que ainda não existe; nunca
-// sobrescreve a escolha do usuário. Idempotente.
+// SeedDefaults adds each default routine that doesn't exist yet; never
+// overwrites the user's choice. Idempotent.
 func SeedDefaults(dryRun bool, now time.Time) (SeedResult, error) {
 	res := SeedResult{Seeded: []string{}, Skipped: []string{}}
 	for _, d := range defaults {
