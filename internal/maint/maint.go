@@ -66,10 +66,10 @@ func Tags(db *sql.DB, limit int) (TagsResult, error) {
 // --- stats ---
 
 type StatsResult struct {
-	DataHome string            `json:"data_home"`
-	Pages    int               `json:"pages"`
-	Raw      int               `json:"raw"`
-	ByKind   map[string]int    `json:"by_kind"`
+	DataHome string              `json:"data_home"`
+	Pages    int                 `json:"pages"`
+	Raw      int                 `json:"raw"`
+	ByKind   map[string]int      `json:"by_kind"`
 	Recent   []map[string]string `json:"recent"`
 }
 

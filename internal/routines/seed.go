@@ -11,7 +11,7 @@ var dreamPrompt string
 // defaultRoutine descreve uma rotina semeada por padrão no setup.
 type defaultRoutine struct {
 	slug, description, schedule, prompt string
-	enabled                            bool
+	enabled                             bool
 }
 
 var defaults = []defaultRoutine{

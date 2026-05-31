@@ -57,8 +57,8 @@ func (Twitter) ComputeToken(id string) string {
 }
 
 const (
-	syndicationURL  = "https://cdn.syndication.twimg.com/tweet-result"
-	twitterUA       = "vbrain/1.0"
+	syndicationURL     = "https://cdn.syndication.twimg.com/tweet-result"
+	twitterUA          = "vbrain/1.0"
 	syndicationTimeout = 10 * time.Second
 )
 

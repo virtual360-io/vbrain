@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -21,6 +23,7 @@ import (
 	"github.com/virtual360-io/vbrain/internal/realtime"
 	"github.com/virtual360-io/vbrain/internal/resolvelinks"
 	"github.com/virtual360-io/vbrain/internal/routines"
+	"github.com/virtual360-io/vbrain/internal/scaffold"
 	"github.com/virtual360-io/vbrain/internal/search"
 	"github.com/virtual360-io/vbrain/internal/writepages"
 )
@@ -62,6 +65,8 @@ func main() {
 		err = cmdRoutineList(os.Args[2:])
 	case "seed-routines":
 		err = cmdSeedRoutines(os.Args[2:])
+	case "setup":
+		err = cmdSetup(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "subcomando desconhecido: %q\n", os.Args[1])
 		os.Exit(2)
@@ -664,6 +669,139 @@ func cmdSeedRoutines(args []string) error {
 		"config_path": routines.ConfigPath(),
 		"seeded":      res.Seeded, "skipped": res.Skipped, "dry_run": *dryRun,
 	})
+}
+
+// cmdSetup bootstrapa a base (~/vbrain): dirs, CLAUDE.md, skills, git init,
+// seed das rotinas e (opcional) criação do repo no GitHub via PAT. As partes
+// interativas (identidade git, coleta de PAT) ficam no install.sh.
+func cmdSetup(args []string) error {
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	github := fs.String("github", "none", "private|public|none")
+	repoName := fs.String("repo-name", "vbrain", "nome do repo no GitHub")
+	skillsSrc := fs.String("skills-src", "", "diretório de skills pra instalar na base")
+	token := fs.String("token", os.Getenv("GITHUB_TOKEN"), "PAT do GitHub (ou env GITHUB_TOKEN)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	dataHome := paths.DataHome()
+	if err := paths.EnsureDirs(); err != nil {
+		return err
+	}
+
+	out := map[string]any{"data_home": dataHome}
+
+	claudeMD, err := scaffold.WriteClaudeMD(dataHome)
+	if err != nil {
+		return err
+	}
+	out["claude_md"] = claudeMD
+
+	if *skillsSrc != "" {
+		n, err := scaffold.InstallSkills(dataHome, *skillsSrc)
+		if err != nil {
+			return err
+		}
+		out["skills_installed"] = n
+	}
+
+	if !git.RepoInitialized(dataHome) {
+		if err := git.Init(dataHome); err != nil {
+			return err
+		}
+		out["initialized"] = true
+	}
+
+	seed, err := routines.SeedDefaults(false, time.Now())
+	if err != nil {
+		return err
+	}
+	out["seeded_routines"] = seed.Seeded
+
+	if _, err := git.Commit("chore: assets do agente vbrain (CLAUDE.md + skills + rotinas)", dataHome); err != nil {
+		return err
+	}
+
+	if *github != "none" {
+		if *token == "" {
+			out["needs_token"] = true
+			out["github"] = *github
+			return emitJSON(out)
+		}
+		url, err := createGitHubRepo(*repoName, *github == "private", *token)
+		if err != nil {
+			return err
+		}
+		if !git.HasRemote(dataHome, "origin") {
+			if err := git.AddRemote(url, dataHome, "origin"); err != nil {
+				return err
+			}
+		}
+		os.Setenv("GITHUB_TOKEN", *token) // go-git push usa o PAT
+		if _, err := git.Push(dataHome, "origin", ""); err != nil {
+			return err
+		}
+		out["remote_url"] = url
+		out["pushed"] = true
+	}
+
+	return emitJSON(out)
+}
+
+// createGitHubRepo cria um repo via API REST do GitHub usando o PAT, e devolve
+// a URL de clone HTTPS. Idempotente-ish: trata 422 (já existe) como ok.
+func createGitHubRepo(name string, private bool, token string) (string, error) {
+	body, _ := json.Marshal(map[string]any{"name": name, "private": private})
+	req, err := http.NewRequest(http.MethodPost, "https://api.github.com/user/repos", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	respBody, _ := io.ReadAll(res.Body)
+
+	var parsed struct {
+		CloneURL string `json:"clone_url"`
+		Owner    struct {
+			Login string `json:"login"`
+		} `json:"owner"`
+	}
+	json.Unmarshal(respBody, &parsed)
+
+	switch res.StatusCode {
+	case 201:
+		return parsed.CloneURL, nil
+	case 422: // provavelmente já existe — monta a URL a partir do login
+		who, err := githubLogin(token)
+		if err != nil {
+			return "", err
+		}
+		return "https://github.com/" + who + "/" + name + ".git", nil
+	default:
+		return "", fmt.Errorf("github repo create HTTP %d: %s", res.StatusCode, string(respBody))
+	}
+}
+
+func githubLogin(token string) (string, error) {
+	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/user", nil)
+	req.Header.Set("Authorization", "token "+token)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	var u struct {
+		Login string `json:"login"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&u); err != nil {
+		return "", err
+	}
+	return u.Login, nil
 }
 
 func emitJSON(v any) error {
