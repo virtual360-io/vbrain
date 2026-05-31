@@ -6,7 +6,7 @@ allowed-tools: Bash, Read, Write, AskUserQuestion, Agent
 
 # vbrain-add-routine
 
-Cria uma rotina no `~/vbrain/config/routines/routines.yml`. O script Ruby
+Cria uma rotina no `~/vbrain/config/routines/routines.yml`. O binário vbrain
 computa `next_run` deterministicamente (fugit) a partir do cron + agora.
 Opcionalmente, pergunta se quer **testar agora** via sub-agente (manual
 trigger via slug, não altera state).

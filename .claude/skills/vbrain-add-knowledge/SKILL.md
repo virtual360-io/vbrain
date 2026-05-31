@@ -6,7 +6,7 @@ allowed-tools: Bash, Read, Write, Agent, AskUserQuestion, WebFetch
 
 # vbrain-add-knowledge
 
-Pipeline determinístico (Ruby) + 2 subagentes LLM (chunker + wiki-writer) para
+Pipeline determinístico (Go) + 2 subagentes LLM (chunker + wiki-writer) para
 transformar um arquivo bruto em páginas wiki indexadas no vbrain.
 
 ## Inputs
@@ -269,7 +269,7 @@ Mostre:
 
 - **Nunca** escrever em `wiki/` diretamente; sempre via `vbrain write-pages`.
 - **Nunca** modificar `raw/` depois de ingerido — é imutável.
-- Se `rake test` falhar antes da execução final (caso 1 do tipo desconhecido),
+- Se `go test` falhar antes da execução final (caso 1 do tipo desconhecido),
   **não** prosseguir até o usuário consertar.
 - **FAITHFULNESS**: os subagentes têm regra dura de não inventar; se eles
   retornarem dados claramente fabricados, sinalize ao usuário.

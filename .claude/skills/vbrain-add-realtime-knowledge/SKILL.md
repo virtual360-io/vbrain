@@ -40,7 +40,7 @@ Se o usuário não passou `source`, use `AskUserQuestion`:
 
 Se a resposta for "outra" ou um valor não suportado, peça ao usuário pra
 descrever a fonte. Pergunte se ele quer que você crie uma fonte
-determinística (com script Ruby e teste) ou apenas uma página fantasma
+determinística (com binário vbrain e teste) ou apenas uma página fantasma
 "manual" agora. Em caso de "manual", você pode escrever
 `wiki/_realtime/<slug>.md` diretamente com `kind: realtime` e os campos que
 fizerem sentido — mas avise que isso é uma fonte one-shot sem handler ao
@@ -77,7 +77,7 @@ visíveis exceto os genéricos do Google. Pra refinar, rode
 ou edite manualmente `~/vbrain/config/realtime/gcalendar.yml` e rode
 `vbrain reindex`."
 
-**2c. Montar JSON e rodar o script Ruby:**
+**2c. Montar JSON e rodar o binário vbrain:**
 
 ```bash
 vbrain realtime gcalendar --json '<JSON>'
@@ -142,7 +142,7 @@ aparecem mas existem com IDs bem-conhecidos: `INBOX`, `IMPORTANT`, `STARRED`,
 > chave `labels`) e rode `vbrain reindex`, ou rode
 > `/vbrain-add-realtime-knowledge gmail` numa sessão interativa."
 
-**2bis-d. Montar JSON e rodar o script Ruby:**
+**2bis-d. Montar JSON e rodar o binário vbrain:**
 
 ```bash
 vbrain realtime gmail --json '<JSON>'
@@ -209,7 +209,7 @@ Não tente bypassar.
 > sessão interativa ou edite `~/vbrain/config/realtime/slack.yml` (adicione
 > objetos `{id, name}` à chave `channels`) e rode `vbrain reindex`."
 
-**2ter-c. Montar JSON e rodar o script Ruby:**
+**2ter-c. Montar JSON e rodar o binário vbrain:**
 
 ```bash
 vbrain realtime slack --json '<JSON>'
@@ -253,7 +253,7 @@ Mostre ao usuário:
   configuração. Listar calendários/labels é OK; buscar eventos/threads é
   responsabilidade do `/vbrain-query-knowledge`.
 - **Nunca** escreva em `wiki/_realtime/` na mão pra fontes suportadas
-  (gcalendar/gmail/slack): sempre vai pelo script Ruby. Pra fontes "outra" sem
+  (gcalendar/gmail/slack): sempre vai pelo binário vbrain. Pra fontes "outra" sem
   script, escrever direto é OK mas avise o usuário que sem handler não vai
   resolver ao vivo.
 - Se o MCP da fonte falhar (não conectado, sem permissão), pare e oriente

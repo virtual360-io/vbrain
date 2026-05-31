@@ -98,7 +98,7 @@ func TestIngestUnknownSource(t *testing.T) {
 
 func TestIngestTweetWithStubbedSyndication(t *testing.T) {
 	d, raw, tmp := setup(t)
-	fixture, err := os.ReadFile(filepath.Join("..", "..", "test", "fixtures", "twitter", "alok_link_tweet.json"))
+	fixture, err := os.ReadFile(filepath.Join("..", "sources", "testdata", "twitter", "alok_link_tweet.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

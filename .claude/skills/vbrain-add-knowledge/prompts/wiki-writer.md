@@ -97,14 +97,14 @@ markdown fences, sem prosa, sem `<think>`:
 Observações:
 
 - Em `update`, o `body_markdown` é o **conteúdo final inteiro** da página (o
-  existente mesclado com os fatos novos) — o Ruby sobrescreve o arquivo todo.
+  existente mesclado com os fatos novos) — o vbrain sobrescreve o arquivo todo.
   Se você omitir o que já existia, ele some. Por isso leia a página antes.
 - Em `update`, o `slug` deve ser o de uma página que **existe** (você a viu na
-  busca). Se o slug não existir, o Ruby trata como `create` (defesa
+  busca). Se o slug não existir, o vbrain trata como `create` (defesa
   anti-alucinação) — então só use `update` quando tiver certeza pela busca.
 - `kind` é só metadado (não determina pasta; a wiki é plana). Em dúvida, `note`.
-  Em `update`, o Ruby preserva o `kind`/título da página existente.
-- `tags`: tipicamente o que o chunker propôs; em `update` o Ruby faz union com
+  Em `update`, o vbrain preserva o `kind`/título da página existente.
+- `tags`: tipicamente o que o chunker propôs; em `update` o vbrain faz union com
   as tags que já estavam na página.
 - **Não** passe `slug_hint`/`slug` em `create`: o slug é derivado do título, e é
   assim que outras páginas resolvem `[[Título desta página]]` pra cá.

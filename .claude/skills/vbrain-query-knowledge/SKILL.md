@@ -13,7 +13,7 @@ correspondente (resolve ao vivo).
 ## Inputs
 
 - **query** (obrigatório): pergunta livre ou keyword. Pode conter `:`, aspas,
-  parênteses — o normalizador Ruby cuida disso.
+  parênteses — o normalizador cuida disso.
 - **limit** (opcional, default 10): número máximo de páginas a retornar.
 
 ## Passos
@@ -22,7 +22,7 @@ correspondente (resolve ao vivo).
 
 O FTS5 é lexical: a pergunta `"quais empregos eu já tive"` não casa nada
 porque a palavra "emprego" não está no corpus (as páginas dizem "Visagio",
-"consultor", "carreira"). O Ruby já remove stopwords, mas não inventa
+"consultor", "carreira"). O vbrain já remove stopwords, mas não inventa
 sinônimos — esse é o seu julgamento.
 
 Pule este passo se a `query` já é keyword(s) (1–3 termos técnicos, um nome

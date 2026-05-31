@@ -6,9 +6,17 @@ tarefas triviais.
 
 Contexto curto: este repo é uma base de conhecimento pessoal estilo ai-memory.
 **Wiki em markdown é a fonte da verdade; o SQLite é índice derivado —
-descartável (dá pra apagar e reconstruir com `reindex.rb`), mas versionado
+descartável (dá pra apagar e reconstruir com `vbrain reindex`), mas versionado
 junto da base por conveniência; o LLM só entra para o que exige julgamento
 (chunkar, sintetizar páginas)**. Veja `README.md` para a arquitetura completa.
+
+> **Stack: Go.** O núcleo determinístico foi migrado de Ruby para um binário
+> único `vbrain` (Go): código em `cmd/vbrain/` + `internal/`, testes `go test`
+> 1:1 por pacote, SQLite via `modernc.org/sqlite` (puro-Go, FTS5) e git via
+> go-git (fallback pro git do sistema). As skills chamam `vbrain <subcomando>`.
+> Onde as regras abaixo citam arquivos/comandos Ruby (`lib/vbrain/*.rb`,
+> `scripts/*.rb`, minitest, `bundle`/`rake`), leia o equivalente Go:
+> `internal/<pkg>`, `vbrain <subcomando>`, `go test`.
 
 ## Regra 1 — Think Before Coding
 

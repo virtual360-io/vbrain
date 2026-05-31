@@ -17,7 +17,7 @@ const (
 
 func fixtureJSON(t *testing.T) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join("..", "..", "test", "fixtures", "twitter", "alok_link_tweet.json"))
+	b, err := os.ReadFile(filepath.Join("testdata", "twitter", "alok_link_tweet.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
