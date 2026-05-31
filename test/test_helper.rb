@@ -1,5 +1,11 @@
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 
+# Espelha o bootstrap de lib/vbrain.rb: o harness lê wiki/SKILL.md UTF-8
+# direto (File.read/match), e no cloud o LANG vem vazio → Ruby assume US-ASCII
+# e quebra com "invalid byte sequence". Fixa UTF-8 independente do locale.
+Encoding.default_external = Encoding::UTF_8
+Encoding.default_internal = Encoding::UTF_8
+
 require "minitest/autorun"
 require "tmpdir"
 require "fileutils"

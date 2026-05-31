@@ -16,7 +16,18 @@ module VBrain
       env = ENV["VBRAIN_HOME"]
       return File.expand_path(env) if env && !env.empty?
 
+      # Sem VBRAIN_HOME explícito: se o código está rodando de dentro de uma
+      # base (o checkout carrega a própria wiki/, como no cloud onde repo ==
+      # base e nada seta VBRAIN_HOME), use essa base. Cobre sub-agentes que
+      # rodam as skills sem herdar o env do shell. Só então cai no ~/vbrain.
+      return PROJECT_ROOT if base?(PROJECT_ROOT)
+
       File.expand_path("~/vbrain")
+    end
+
+    # Um diretório é uma base vbrain se carrega a wiki/ (fonte da verdade).
+    def self.base?(dir)
+      Dir.exist?(File.join(dir, "wiki"))
     end
 
     def self.raw_dir;   File.join(data_home, "raw");   end

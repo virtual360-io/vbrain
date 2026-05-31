@@ -10,12 +10,28 @@ class PathsTest < Minitest::Test
     ENV["VBRAIN_HOME"] = old
   end
 
-  def test_data_home_defaults_to_home_vbrain_when_env_blank
+  # Sem VBRAIN_HOME, rodando de dentro de uma base (PROJECT_ROOT tem wiki/),
+  # o código usa essa base — é o que conserta o cloud, onde o checkout é a
+  # base e o sub-agente não herda VBRAIN_HOME do shell.
+  def test_data_home_uses_local_base_when_env_blank_and_running_in_base
     old = ENV["VBRAIN_HOME"]
     ENV["VBRAIN_HOME"] = nil
-    assert_equal File.expand_path("~/vbrain"), VBrain::Paths.data_home
+    assert VBrain::Paths.base?(VBrain::Paths::PROJECT_ROOT),
+      "pré-condição: o repo de teste é uma base (tem wiki/)"
+    assert_equal VBrain::Paths::PROJECT_ROOT, VBrain::Paths.data_home
     ENV["VBRAIN_HOME"] = ""
-    assert_equal File.expand_path("~/vbrain"), VBrain::Paths.data_home
+    assert_equal VBrain::Paths::PROJECT_ROOT, VBrain::Paths.data_home
+  ensure
+    ENV["VBRAIN_HOME"] = old
+  end
+
+  # Sem VBRAIN_HOME e fora de uma base, cai no ~/vbrain padrão.
+  def test_data_home_defaults_to_home_vbrain_when_env_blank_and_not_in_base
+    old = ENV["VBRAIN_HOME"]
+    ENV["VBRAIN_HOME"] = nil
+    VBrain::Paths.stub :base?, false do
+      assert_equal File.expand_path("~/vbrain"), VBrain::Paths.data_home
+    end
   ensure
     ENV["VBRAIN_HOME"] = old
   end
