@@ -3,17 +3,23 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	iofs "io/fs"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
+	root "github.com/virtual360-io/vbrain"
 	"github.com/virtual360-io/vbrain/internal/db"
 	"github.com/virtual360-io/vbrain/internal/git"
 	"github.com/virtual360-io/vbrain/internal/index"
@@ -25,6 +31,7 @@ import (
 	"github.com/virtual360-io/vbrain/internal/routines"
 	"github.com/virtual360-io/vbrain/internal/scaffold"
 	"github.com/virtual360-io/vbrain/internal/search"
+	"github.com/virtual360-io/vbrain/internal/selfupdate"
 	"github.com/virtual360-io/vbrain/internal/writepages"
 )
 
@@ -65,8 +72,12 @@ func main() {
 		err = cmdRoutineList(os.Args[2:])
 	case "seed-routines":
 		err = cmdSeedRoutines(os.Args[2:])
+	case "install":
+		err = cmdInstall(os.Args[2:])
 	case "setup":
 		err = cmdSetup(os.Args[2:])
+	case "update":
+		err = cmdUpdate(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "subcomando desconhecido: %q\n", os.Args[1])
 		os.Exit(2)
@@ -671,34 +682,106 @@ func cmdSeedRoutines(args []string) error {
 	})
 }
 
-// cmdSetup bootstrapa a base (~/vbrain): dirs, CLAUDE.md, skills, git init,
-// seed das rotinas e (opcional) criação do repo no GitHub via PAT. As partes
-// interativas (identidade git, coleta de PAT) ficam no install.sh.
-func cmdSetup(args []string) error {
-	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+// cmdInstall é o ponto de entrada após baixar o binário da release: instala o
+// próprio binário no PATH, instala as skills embutidas globalmente, e bootstrapa
+// a base (= setup), com onboarding interativo do GitHub quando num terminal.
+// Substitui o antigo install.sh.
+func cmdInstall(args []string) error {
+	fs := flag.NewFlagSet("install", flag.ContinueOnError)
+	binDir := fs.String("bin-dir", defaultBinDir(), "diretório no PATH p/ o binário")
 	github := fs.String("github", "none", "private|public|none")
 	repoName := fs.String("repo-name", "vbrain", "nome do repo no GitHub")
-	skillsSrc := fs.String("skills-src", "", "diretório de skills pra instalar na base")
 	token := fs.String("token", os.Getenv("GITHUB_TOKEN"), "PAT do GitHub (ou env GITHUB_TOKEN)")
+	noPrompt := fs.Bool("no-prompt", false, "não perguntar nada (automação)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
+	out := map[string]any{}
+
+	// 1. binário no PATH
+	binPath, onPath, err := installSelf(*binDir)
+	if err != nil {
+		return err
+	}
+	out["binary"] = binPath
+	if !onPath {
+		fmt.Fprintf(os.Stderr, "→ adicione ao PATH: export PATH=\"%s:$PATH\"\n", filepath.Dir(binPath))
+	}
+
+	// 2. skills globais (~/.claude/skills) a partir do embed
+	skills, err := embeddedSkills()
+	if err != nil {
+		return err
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		n, err := scaffold.InstallSkills(home, skills)
+		if err != nil {
+			return err
+		}
+		out["global_skills_installed"] = n
+	}
+
+	// 3. onboarding interativo (git identity + GitHub) quando num terminal
+	if !*noPrompt {
+		onboard(github, repoName, token)
+	}
+
+	// 4. bootstrap da base
+	if err := bootstrapBase(out, *github, *repoName, *token); err != nil {
+		return err
+	}
+	return emitJSON(out)
+}
+
+// cmdSetup bootstrapa só a base (dirs, CLAUDE.md, skills, git init, seed das
+// rotinas, GitHub opcional). Reutilizável; `vbrain install` o engloba.
+func cmdSetup(args []string) error {
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	github := fs.String("github", "none", "private|public|none")
+	repoName := fs.String("repo-name", "vbrain", "nome do repo no GitHub")
+	token := fs.String("token", os.Getenv("GITHUB_TOKEN"), "PAT do GitHub (ou env GITHUB_TOKEN)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	out := map[string]any{}
+	if err := bootstrapBase(out, *github, *repoName, *token); err != nil {
+		return err
+	}
+	return emitJSON(out)
+}
+
+// cmdUpdate auto-atualiza o binário a partir da release rolling latest.
+func cmdUpdate(args []string) error {
+	res, err := selfupdate.Run()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "atualizado: %s → %s\n", res.Asset, res.Path)
+	return emitJSON(res)
+}
+
+// embeddedSkills devolve o FS das skills embutidas, com raiz em .claude/skills.
+func embeddedSkills() (iofs.FS, error) {
+	return iofs.Sub(root.SkillsFS, ".claude/skills")
+}
+
+// bootstrapBase faz dirs + CLAUDE.md + skills na base + git init + seed + commit
+// + (opcional) criação/push do repo no GitHub. Preenche out.
+func bootstrapBase(out map[string]any, github, repoName, token string) error {
 	dataHome := paths.DataHome()
+	out["data_home"] = dataHome
 	if err := paths.EnsureDirs(); err != nil {
 		return err
 	}
-
-	out := map[string]any{"data_home": dataHome}
-
 	claudeMD, err := scaffold.WriteClaudeMD(dataHome)
 	if err != nil {
 		return err
 	}
 	out["claude_md"] = claudeMD
 
-	if *skillsSrc != "" {
-		n, err := scaffold.InstallSkills(dataHome, *skillsSrc)
+	if skills, err := embeddedSkills(); err == nil {
+		n, err := scaffold.InstallSkills(dataHome, skills)
 		if err != nil {
 			return err
 		}
@@ -722,13 +805,13 @@ func cmdSetup(args []string) error {
 		return err
 	}
 
-	if *github != "none" {
-		if *token == "" {
+	if github != "none" && github != "" {
+		if token == "" {
 			out["needs_token"] = true
-			out["github"] = *github
-			return emitJSON(out)
+			out["github"] = github
+			return nil
 		}
-		url, err := createGitHubRepo(*repoName, *github == "private", *token)
+		url, err := createGitHubRepo(repoName, github == "private", token)
 		if err != nil {
 			return err
 		}
@@ -737,15 +820,120 @@ func cmdSetup(args []string) error {
 				return err
 			}
 		}
-		os.Setenv("GITHUB_TOKEN", *token) // go-git push usa o PAT
+		os.Setenv("GITHUB_TOKEN", token) // go-git push usa o PAT
 		if _, err := git.Push(dataHome, "origin", ""); err != nil {
 			return err
 		}
 		out["remote_url"] = url
 		out["pushed"] = true
 	}
+	return nil
+}
 
-	return emitJSON(out)
+func defaultBinDir() string {
+	if d := os.Getenv("VBRAIN_BIN_DIR"); d != "" {
+		return d
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local", "bin")
+}
+
+// installSelf copia o binário em execução para binDir (no-op se já roda de lá).
+// Devolve o caminho final e se binDir já está no PATH.
+func installSelf(binDir string) (string, bool, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", false, err
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	name := "vbrain"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	target := filepath.Join(binDir, name)
+	onPath := inPath(binDir)
+	if exe == target {
+		return target, onPath, nil
+	}
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		return "", onPath, err
+	}
+	data, err := os.ReadFile(exe)
+	if err != nil {
+		return "", onPath, err
+	}
+	if err := os.WriteFile(target, data, 0o755); err != nil {
+		return "", onPath, err
+	}
+	return target, onPath, nil
+}
+
+func inPath(dir string) bool {
+	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
+		if p == dir {
+			return true
+		}
+	}
+	return false
+}
+
+// onboard pergunta (só em terminal) identidade git e visibilidade/PAT do GitHub.
+func onboard(github, repoName, token *string) {
+	if !isTerminal() {
+		return
+	}
+	ensureGitIdentity()
+	if *github == "none" {
+		switch strings.ToLower(prompt("Versionar a base no GitHub? [p]rivado/[u]público/[n]enhum (p): ")) {
+		case "u", "public":
+			*github = "public"
+		case "n", "none":
+			*github = "none"
+		default: // "" (default) ou "p" → privado
+			*github = "private"
+		}
+	}
+	if *github != "none" && *token == "" {
+		fmt.Fprintln(os.Stderr, "Crie um PAT (escopo 'repo'): https://github.com/settings/tokens/new?scopes=repo&description=vbrain")
+		*token = prompt("Cole o PAT (vazio pula o GitHub): ")
+		if *token == "" {
+			*github = "none"
+		} else if *repoName == "" {
+			*repoName = "vbrain"
+		}
+	}
+}
+
+// ensureGitIdentity preenche user.name/email globais via git do sistema, se
+// presente e faltando.
+func ensureGitIdentity() {
+	if _, err := exec.LookPath("git"); err != nil {
+		return
+	}
+	for key, q := range map[string]string{"user.name": "Seu nome para os commits: ", "user.email": "Seu email para os commits: "} {
+		out, _ := exec.Command("git", "config", "--global", key).Output()
+		if strings.TrimSpace(string(out)) != "" {
+			continue
+		}
+		if v := prompt(q); v != "" {
+			exec.Command("git", "config", "--global", key, v).Run()
+		}
+	}
+}
+
+var stdinReader = bufio.NewReader(os.Stdin)
+
+func prompt(q string) string {
+	fmt.Fprint(os.Stderr, q)
+	line, _ := stdinReader.ReadString('\n')
+	return strings.TrimSpace(line)
+}
+
+func isTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
 // createGitHubRepo cria um repo via API REST do GitHub usando o PAT, e devolve

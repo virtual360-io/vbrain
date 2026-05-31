@@ -5,7 +5,8 @@
 package scaffold
 
 import (
-	"io"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -61,13 +62,14 @@ func WriteClaudeMD(dir string) (bool, error) {
 	return true, nil
 }
 
-// InstallSkills copia cada skill (subdiretório) de skillsSrc para
+// InstallSkills copia cada skill (subdiretório de skills, um fs.FS — tipicamente
+// o embed.FS do binário, com fs.Sub na raiz das skills) para
 // <dir>/.claude/skills/. Idempotente: remove o destino de cada skill antes de
 // copiar. Retorna o número de skills instaladas.
-func InstallSkills(dir, skillsSrc string) (int, error) {
-	entries, err := os.ReadDir(skillsSrc)
+func InstallSkills(dir string, skills fs.FS) (int, error) {
+	entries, err := fs.ReadDir(skills, ".")
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return 0, nil
 		}
 		return 0, err
@@ -85,7 +87,7 @@ func InstallSkills(dir, skillsSrc string) (int, error) {
 		if err := os.RemoveAll(target); err != nil {
 			return count, err
 		}
-		if err := copyTree(filepath.Join(skillsSrc, e.Name()), target); err != nil {
+		if err := copyTreeFS(skills, e.Name(), target); err != nil {
 			return count, err
 		}
 		count++
@@ -93,34 +95,24 @@ func InstallSkills(dir, skillsSrc string) (int, error) {
 	return count, nil
 }
 
-func copyTree(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+// copyTreeFS copia srcDir (dentro de fsys) para dstDir no disco.
+func copyTreeFS(fsys fs.FS, srcDir, dstDir string) error {
+	return fs.WalkDir(fsys, srcDir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, _ := filepath.Rel(src, path)
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
+		rel, _ := filepath.Rel(srcDir, p)
+		target := filepath.Join(dstDir, rel)
+		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
-		return copyFile(path, target)
+		data, err := fs.ReadFile(fsys, p)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
 	})
-}
-
-func copyFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
 }

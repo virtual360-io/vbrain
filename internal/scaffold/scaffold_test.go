@@ -46,7 +46,7 @@ func TestInstallsSkillsIntoClaudeSkills(t *testing.T) {
 	os.MkdirAll(filepath.Join(src, "vbrain-foo"), 0o755)
 	os.WriteFile(filepath.Join(src, "vbrain-foo", "SKILL.md"), []byte("x"), 0o644)
 
-	n, err := scaffold.InstallSkills(dir, src)
+	n, err := scaffold.InstallSkills(dir, os.DirFS(src))
 	if err != nil || n != 1 {
 		t.Fatalf("n=%d err=%v", n, err)
 	}
@@ -61,8 +61,8 @@ func TestInstallSkillsIdempotentDoesNotNest(t *testing.T) {
 	os.MkdirAll(filepath.Join(src, "vbrain-foo"), 0o755)
 	os.WriteFile(filepath.Join(src, "vbrain-foo", "SKILL.md"), []byte("x"), 0o644)
 
-	scaffold.InstallSkills(dir, src)
-	n, err := scaffold.InstallSkills(dir, src)
+	scaffold.InstallSkills(dir, os.DirFS(src))
+	n, err := scaffold.InstallSkills(dir, os.DirFS(src))
 	if err != nil || n != 1 {
 		t.Fatalf("n=%d err=%v", n, err)
 	}

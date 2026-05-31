@@ -30,7 +30,7 @@ func (systemBackend) Init(dir string) error {
 	if _, err := sysRun(dir, "git", "add", ".gitignore"); err != nil {
 		return err
 	}
-	_, err := sysRun(dir, "git", "-c", "commit.gpgsign=false", "commit", "-m", "chore: initialize vbrain")
+	_, err := sysRun(dir, commitArgs(dir, "chore: initialize vbrain")...)
 	return err
 }
 
@@ -41,7 +41,7 @@ func (systemBackend) Commit(message, dir string) (CommitResult, error) {
 	if !changesStaged(dir) {
 		return CommitResult{Committed: false, Reason: "no changes"}, nil
 	}
-	if _, err := sysRun(dir, "git", "-c", "commit.gpgsign=false", "commit", "-m", message); err != nil {
+	if _, err := sysRun(dir, commitArgs(dir, message)...); err != nil {
 		return CommitResult{}, err
 	}
 	sha, _ := sysStatus(dir, "git", "rev-parse", "HEAD")
@@ -64,6 +64,22 @@ func (systemBackend) Push(dir, name, branch string) (PushResult, error) {
 func (systemBackend) AddRemote(url, dir, name string) error {
 	_, err := sysRun(dir, "git", "remote", "add", name, url)
 	return err
+}
+
+// commitArgs monta o `git [-c …] commit -m msg`: nunca impõe assinatura
+// (commit.gpgsign=false) e, se o usuário não tem identidade configurada, usa um
+// autor vbrain de fallback (espelha o backend go-git) — sem sobrescrever a real.
+func commitArgs(dir, message string) []string {
+	args := []string{"git", "-c", "commit.gpgsign=false"}
+	if !configSet(dir, "user.name") || !configSet(dir, "user.email") {
+		args = append(args, "-c", "user.name=vbrain", "-c", "user.email=vbrain@localhost")
+	}
+	return append(args, "commit", "-m", message)
+}
+
+func configSet(dir, key string) bool {
+	out, ok := sysStatus(dir, "git", "config", key)
+	return ok && strings.TrimSpace(out) != ""
 }
 
 // changesStaged: git diff --cached --quiet sai != 0 quando há algo staged.

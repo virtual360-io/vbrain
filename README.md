@@ -126,8 +126,8 @@ vbrain/
 ├── internal/            # núcleo determinístico (paths, db, page, slug, ftsquery,
 │                        #   links, sources, index, search, writepages, ingest,
 │                        #   resolvelinks, git, routines, realtime, maint, scaffold)
-├── .claude/skills/      # SKILL.md + prompts dos subagentes
-└── install.sh           # build + instala skills + bootstrap da base
+├── .claude/skills/      # SKILL.md + prompts dos subagentes (embutidos no binário via go:embed)
+└── embed.go             # //go:embed das skills pra o `vbrain install` se bastar
 ```
 
 Todo pacote em `internal/` tem teste `go test` correspondente. Os testes isolam
@@ -135,15 +135,28 @@ dados em tmpdir via `VBRAIN_HOME` / dirs explícitos.
 
 ## Setup
 
+1. **Baixe o binário** da release `latest` (asset da sua plataforma — ex.:
+   `vbrain-linux-amd64`), torne-o executável.
+2. **Rode `vbrain install`** — coloca o binário no PATH (`~/.local/bin`),
+   instala as skills (embutidas no binário) em `~/.claude/skills`, bootstrapa a
+   base (`CLAUDE.md` + skills + git init + rotina `dream`) e faz o onboarding do
+   GitHub (identidade git + PAT + cria o repo) num terminal.
+
 ```bash
-git clone <repo> && cd vbrain
-./install.sh          # builda vbrain → PATH, instala skills, bootstrapa a base
+# ex. Linux x86-64
+curl -L -o vbrain https://github.com/virtual360-io/vbrain/releases/download/latest/vbrain-linux-amd64
+chmod +x vbrain
+./vbrain install        # ou: ./vbrain install --github private --no-prompt
 ```
 
-Pré-requisitos antes do install: um shell, git (pra clonar) e o toolchain Go
-(pra buildar; ou um binário `vbrain` pré-compilado). Depois do install nada de
-Ruby/gems — o `vbrain` é autocontido. `VBRAIN_HOME` pode ser exportado pra mover
-a base.
+Não precisa de Ruby, gems, nem clonar o repo — o `vbrain` é um binário único e
+autocontido (skills inclusas). `VBRAIN_HOME` pode ser exportado pra mover a base.
+
+### Atualizar
+
+```bash
+vbrain update           # baixa o binário mais recente da release (verifica SHA256)
+```
 
 ## Testes
 
