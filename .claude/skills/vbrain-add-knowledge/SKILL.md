@@ -45,9 +45,9 @@ test -d ~/vbrain/.git && echo present || echo absent
 
 Conforme a resposta, rode:
 
-- Privado: `bundle exec ruby scripts/init_repo.rb --github private`
-- Público: `bundle exec ruby scripts/init_repo.rb --github public`
-- Local: `bundle exec ruby scripts/init_repo.rb`
+- Privado: `vbrain setup --github private`
+- Público: `vbrain setup --github public`
+- Local: `vbrain setup`
 - Pular: não rode nada, e marque mentalmente que o passo 6 deve ser pulado.
 
 Parse o JSON:
@@ -56,8 +56,8 @@ Parse o JSON:
 - `{"initialized":false,"reason":"already a repo"}` → idempotente, siga.
 - `{"needs_gh":true}` → `gh` não instalado. Use `AskUserQuestion` perguntando
   se o usuário quer instalar (`brew install gh && gh auth login`). Se sim,
-  rode os comandos e depois re-rode `init_repo.rb`. Se não, caia para "Só git
-  local" (`init_repo.rb` sem `--github`).
+  rode os comandos e depois re-rode `vbrain setup`. Se não, caia para "Só git
+  local" (`vbrain setup` sem `--github`).
 - `{"needs_gh_auth":true}` → `gh` está instalado mas não autenticado.
   Instrua o usuário a rodar `gh auth login` num terminal interativo (você
   não consegue rodar comandos interativos), depois re-rode.
@@ -67,7 +67,7 @@ Parse o JSON:
 ### 1. Ingerir o raw
 
 ```bash
-bundle exec ruby scripts/ingest_raw.rb <path>
+vbrain ingest <path>
 ```
 
 Parse o JSON de saída. Possíveis casos:
@@ -164,7 +164,7 @@ Para **cada chunk**, na ordem, faça o ciclo:
    `prompts/wiki-writer.md` como system prompt. No user message passe: o chunk
    (JSON do chunker), o caminho absoluto da wiki (`<data_home>/wiki`), o
    `source_raw`, e o comando de navegação
-   `bundle exec ruby scripts/query.rb "<termos>" --format json --limit 8`.
+   `vbrain query "<termos>" --format json --limit 8`.
    O writer devolve UM JSON: `op` (`create`|`update`), `slug` (quando `update`),
    `title`, `tags`, `kind`, `body_markdown` (corpo **final completo**).
 2. **Persistir** — escreva esse único page-object em
@@ -178,7 +178,7 @@ Só depois de reindexar, parta pro próximo chunk. Não acumule páginas pra um
 ### 4. Persistir a página (staging + publicação atômica)
 
 ```bash
-bundle exec ruby scripts/write_pages.rb --raw-id <N> --pages-json raw/.tmp/page-<N>.json
+vbrain write-pages --raw-id <N> --pages-json raw/.tmp/page-<N>.json
 ```
 
 O script encena a página (corpo inteiro) em `raw/.tmp/wiki-stage-<N>/` e só então
@@ -196,7 +196,7 @@ conhecimento moram na **raiz** de `wiki/` (espaço plano, sem pastas por tipo).
 ### 4b. Linkificar (determinístico) + resolver não-resolvidos (LLM)
 
 ```bash
-bundle exec ruby scripts/linkify.rb
+vbrain linkify
 ```
 
 Converte os `[[wikilinks]]` resolvíveis por slug exato em links markdown
@@ -204,7 +204,7 @@ Converte os `[[wikilinks]]` resolvíveis por slug exato em links markdown
 renderiza `[[ ]]` em arquivos de repo). Determinístico, idempotente, preserva
 o frontmatter verbatim. Saída: `{"changed":N,"scanned":N}`.
 
-Depois do `reindex.rb` (passo 5), os links que sobraram **não-resolvidos**
+Depois do `vbrain reindex` (passo 5), os links que sobraram **não-resolvidos**
 (slug do título não bate com nenhuma página) ficam na tabela `links` com
 `to_page_id NULL`. Para fortalecer o grafo, uma **camada de julgamento (LLM)**
 decide a qual página existente cada um se refere:
@@ -217,21 +217,21 @@ decide a qual página existente cada um se refere:
    Saída: JSON `{"Título": "slug" | null}`.
 3. Aplique determinísticamente e reindexe:
    ```bash
-   bundle exec ruby scripts/resolve_links.rb --map raw/.tmp/linkmap.json
-   bundle exec ruby scripts/reindex.rb
+   vbrain resolve-links --map raw/.tmp/linkmap.json
+   vbrain reindex
    ```
-   `resolve_links.rb` descarta slugs que não existem (defesa anti-alucinação).
+   `vbrain resolve-links` descarta slugs que não existem (defesa anti-alucinação).
 
 ### 5. Reindexar
 
 ```bash
-bundle exec ruby scripts/reindex.rb
+vbrain reindex
 ```
 
 A saída tem `{"inserted":N,"updated":N,"deleted":N,"links":N}`. O índice é
 puramente o SQLite (`pages` + virtual `pages_fts` + tabela `links`); triggers
 AI/AD/AU sincronizam o FTS5 automaticamente. Além de reindexar o FTS, o
-`reindex.rb` **parseia os `[[wikilinks]]` do body e reconstrói o grafo** na
+`vbrain reindex` **parseia os `[[wikilinks]]` do body e reconstrói o grafo** na
 tabela `links` (alvo inexistente → aresta com `to_page_id` NULL, resolvida num
 reindex futuro). Não há `wiki/index.md` — espelhamos o ai-memory: a estrutura
 é o grafo de links + o SQLite derivado, não uma árvore de pastas.
@@ -241,7 +241,7 @@ reindex futuro). Não há `wiki/index.md` — espelhamos o ai-memory: a estrutur
 Se o passo 0 não foi pulado:
 
 ```bash
-bundle exec ruby scripts/commit.rb --message "add: <N> páginas de <basename>"
+vbrain commit --message "add: <N> páginas de <basename>"
 ```
 
 Onde `<N>` é o `count` retornado em 4 e `<basename>` é o nome curto do
@@ -261,13 +261,13 @@ o erro e siga.
 Mostre:
 - Tipo detectado (`source_type`)
 - Páginas **criadas** (`written`) e **atualizadas** (`updated`) em `wiki/`
-- Estatísticas do banco: `bundle exec ruby scripts/stats.rb` (retorna JSON com
+- Estatísticas do banco: `vbrain stats` (retorna JSON com
   total de páginas, distribuição por kind e 5 mais recentes)
 - Status do commit/push (sha + remote URL quando aplicável)
 
 ## Regras duras
 
-- **Nunca** escrever em `wiki/` diretamente; sempre via `write_pages.rb`.
+- **Nunca** escrever em `wiki/` diretamente; sempre via `vbrain write-pages`.
 - **Nunca** modificar `raw/` depois de ingerido — é imutável.
 - Se `rake test` falhar antes da execução final (caso 1 do tipo desconhecido),
   **não** prosseguir até o usuário consertar.

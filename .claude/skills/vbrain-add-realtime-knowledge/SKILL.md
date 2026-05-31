@@ -21,9 +21,9 @@ ao vivo em vez de devolver o body.
 
 | `source`    | Status      | Script determinístico                    |
 |---|---|---|
-| `gcalendar` | suportado   | `scripts/add_realtime/gcalendar.rb`      |
-| `gmail`     | suportado   | `scripts/add_realtime/gmail.rb`          |
-| `slack`     | suportado   | `scripts/add_realtime/slack.rb`          |
+| `gcalendar` | suportado   | `vbrain realtime gcalendar`      |
+| `gmail`     | suportado   | `vbrain realtime gmail`          |
+| `slack`     | suportado   | `vbrain realtime slack`          |
 | outro       | improvise   | pergunte ao usuário detalhes da conexão  |
 
 ## Passos
@@ -75,12 +75,12 @@ explicitamente ao usuário no relatório final: "Conectei todos os calendários
 visíveis exceto os genéricos do Google. Pra refinar, rode
 `/vbrain-add-realtime-knowledge gcalendar` de novo numa sessão interativa
 ou edite manualmente `~/vbrain/config/realtime/gcalendar.yml` e rode
-`scripts/reindex.rb`."
+`vbrain reindex`."
 
 **2c. Montar JSON e rodar o script Ruby:**
 
 ```bash
-bundle exec ruby scripts/add_realtime/gcalendar.rb --calendars-json '<JSON>'
+vbrain realtime gcalendar --json '<JSON>'
 ```
 
 Onde `<JSON>` é uma string JSON com a chave `calendars`, cada item
@@ -101,13 +101,13 @@ O script:
 **2d. Reindexar** pra a página fantasma entrar no FTS5:
 
 ```bash
-bundle exec ruby scripts/reindex.rb
+vbrain reindex
 ```
 
 **2e. Commit (se houver repo git no `~/vbrain`):**
 
 ```bash
-bundle exec ruby scripts/commit.rb --message "realtime: conecta gcalendar (<N> calendários)"
+vbrain commit --message "realtime: conecta gcalendar (<N> calendários)"
 ```
 
 Onde `<N>` é o número de calendários conectados.
@@ -139,13 +139,13 @@ aparecem mas existem com IDs bem-conhecidos: `INBOX`, `IMPORTANT`, `STARRED`,
 `INBOX` + `IMPORTANT` por default e avise:
 > "Conectei INBOX + IMPORTANT. Pra refinar, edite
 > `~/vbrain/config/realtime/gmail.yml` (adicione objetos `{id, name}` à
-> chave `labels`) e rode `scripts/reindex.rb`, ou rode
+> chave `labels`) e rode `vbrain reindex`, ou rode
 > `/vbrain-add-realtime-knowledge gmail` numa sessão interativa."
 
 **2bis-d. Montar JSON e rodar o script Ruby:**
 
 ```bash
-bundle exec ruby scripts/add_realtime/gmail.rb --labels-json '<JSON>'
+vbrain realtime gmail --json '<JSON>'
 ```
 
 Onde `<JSON>` é uma string JSON com a chave `labels`, cada item
@@ -207,12 +207,12 @@ Não tente bypassar.
 > "Conectei o Slack em modo global (busca no workspace inteiro). Pra
 > restringir a canais, rode `/vbrain-add-realtime-knowledge slack` numa
 > sessão interativa ou edite `~/vbrain/config/realtime/slack.yml` (adicione
-> objetos `{id, name}` à chave `channels`) e rode `scripts/reindex.rb`."
+> objetos `{id, name}` à chave `channels`) e rode `vbrain reindex`."
 
 **2ter-c. Montar JSON e rodar o script Ruby:**
 
 ```bash
-bundle exec ruby scripts/add_realtime/slack.rb --channels-json '<JSON>'
+vbrain realtime slack --json '<JSON>'
 ```
 
 Onde `<JSON>` é uma string JSON com a chave `channels`, cada item

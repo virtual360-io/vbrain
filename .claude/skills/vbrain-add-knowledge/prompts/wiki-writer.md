@@ -14,7 +14,7 @@ de Bash e Read. Faça, nesta ordem:
 1. **Busque no índice** as entidades/assunto do chunk (pessoas, empresas,
    instituições, projetos, conceitos). Rode a busca FTS uma ou mais vezes:
    ```
-   bundle exec ruby scripts/query.rb "<termos do chunk>" --format json --limit 8
+   vbrain query "<termos do chunk>" --format json --limit 8
    ```
    A saída tem `results` (hits diretos) e `related` (vizinhos no grafo). Cada
    item traz `path` (slug.md) e `title`.

@@ -26,7 +26,7 @@ sozinho a cada 15 minutos.
 ### 1. Tick: claim de rotinas vencidas
 
 ```bash
-bundle exec ruby scripts/run_due_routines.rb
+vbrain routines
 ```
 
 Esse script é **determinístico** e atômico:
@@ -136,22 +136,22 @@ Próximas:
 - <slug 2>: <next_run 2>
 ```
 
-(Use `list_routines.rb` pra pegar `next_run` se precisar de detalhes.)
+(Use `vbrain routine-list` pra pegar `next_run` se precisar de detalhes.)
 
 ## Passos (modo `<slug>` — manual trigger)
 
-1. `BUNDLE_GEMFILE=… bundle exec ruby scripts/list_routines.rb --slug <slug>`
+1. `vbrain routine-list --slug <slug>`
    pra recuperar o entry.
 2. Se `count == 0`, reporte "rotina `<slug>` não existe" + sugira
    `/vbrain-add-routine`.
 3. Lance **um** `Agent` com o mesmo template do passo 2 acima.
-4. Reporte o output. **Não chame** `run_due_routines.rb` — manual trigger
+4. Reporte o output. **Não chame** `vbrain routines` — manual trigger
    não altera `next_run`/`last_run`.
 
 ## Passos (modo `status`)
 
 ```bash
-BUNDLE_GEMFILE=… bundle exec ruby scripts/list_routines.rb
+vbrain routine-list
 ```
 
 Tabela:
@@ -164,7 +164,7 @@ Tabela:
 - **Sempre sub-agente**, nunca inline. Razões: isolamento, paralelismo,
   fail isolation.
 - **Watch é default** — sem args, sempre re-arme o `/loop` (idempotente).
-- **Não modifique** `routines.yml` aqui — apenas pelo `run_due_routines.rb`
+- **Não modifique** `routines.yml` aqui — apenas pelo `vbrain routines`
   (que atualiza next_run/last_run). Adição/edição vem do `/vbrain-add-routine`.
 - **Manual trigger** (`<slug>`) NÃO altera state. É só pra teste/debug
   ou execução fora do schedule.

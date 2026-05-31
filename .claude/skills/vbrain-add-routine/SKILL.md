@@ -61,7 +61,7 @@ de Brasília. Mencione isso se relevante (ex.: usuário viajando).
 ### 2. Detectar colisão de slug
 
 ```bash
-bundle exec ruby scripts/list_routines.rb --slug <slug>
+vbrain routine-list --slug <slug>
 ```
 
 Se `count > 0`, use `AskUserQuestion`:
@@ -83,7 +83,7 @@ quebra com markdown/aspas/newlines).
 ### 4. Rodar o script
 
 ```bash
-bundle exec ruby scripts/add_routine.rb --slug <slug> --description "<desc>" --schedule "<cron>" --prompt-file /tmp/vbrain-routine-prompt-<slug>.md [--replace]
+vbrain routine-add --slug <slug> --description "<desc>" --schedule "<cron>" --prompt-file /tmp/vbrain-routine-prompt-<slug>.md [--replace]
 ```
 
 Output JSON: `{"config_path", "routine": {... incluindo next_run inicial}, "total"}`.
@@ -91,7 +91,7 @@ Output JSON: `{"config_path", "routine": {... incluindo next_run inicial}, "tota
 ### 5. Commit (se houver repo git no `~/vbrain`)
 
 ```bash
-bundle exec ruby scripts/commit.rb --message "routine: adiciona '<slug>' (<cron>)"
+vbrain commit --message "routine: adiciona '<slug>' (<cron>)"
 ```
 
 (Use `routine: substitui '<slug>'` quando `--replace`.)
