@@ -16,6 +16,7 @@ import (
 	"github.com/virtual360-io/vbrain/internal/index"
 	"github.com/virtual360-io/vbrain/internal/ingest"
 	"github.com/virtual360-io/vbrain/internal/paths"
+	"github.com/virtual360-io/vbrain/internal/realtime"
 	"github.com/virtual360-io/vbrain/internal/resolvelinks"
 	"github.com/virtual360-io/vbrain/internal/routines"
 	"github.com/virtual360-io/vbrain/internal/search"
@@ -24,7 +25,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "uso: vbrain <reindex|query|ingest|write-pages|resolve-links|commit|routines> [args]")
+		fmt.Fprintln(os.Stderr, "uso: vbrain <reindex|query|ingest|write-pages|resolve-links|commit|routines|realtime> [args]")
 		os.Exit(2)
 	}
 	var err error
@@ -43,6 +44,8 @@ func main() {
 		err = cmdIngest(os.Args[2:])
 	case "routines":
 		err = cmdRoutines(os.Args[2:])
+	case "realtime":
+		err = cmdRealtime(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "subcomando desconhecido: %q\n", os.Args[1])
 		os.Exit(2)
@@ -373,6 +376,113 @@ func dueEntry(r routines.Routine, claimedAt *string) map[string]any {
 		"last_run":    r.LastRun,
 		"claimed_at":  claimedAt,
 	}
+}
+
+// cmdRealtime conecta uma fonte realtime: grava o config e a página fantasma.
+// uso: vbrain realtime <gcalendar|gmail|slack> --json '<json>' | --file <path>
+func cmdRealtime(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("uso: vbrain realtime <gcalendar|gmail|slack> --json '<json>'")
+	}
+	source := args[0]
+	fs := flag.NewFlagSet("realtime", flag.ContinueOnError)
+	jsonStr := fs.String("json", "", "itens em JSON (array ou {key:[...]})")
+	file := fs.String("file", "", "arquivo com o JSON dos itens")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+
+	raw := []byte(*jsonStr)
+	if *file != "" {
+		b, err := os.ReadFile(*file)
+		if err != nil {
+			return err
+		}
+		raw = b
+	}
+
+	keys := map[string]string{"gcalendar": "calendars", "gmail": "labels", "slack": "channels"}
+	key, ok := keys[source]
+	if !ok {
+		return fmt.Errorf("fonte realtime desconhecida: %q", source)
+	}
+	items, err := parseRealtimeItems(raw, key)
+	if err != nil {
+		return err
+	}
+
+	if err := paths.EnsureDirs(); err != nil {
+		return err
+	}
+
+	out := map[string]any{"source": source}
+	var saved []realtime.Item
+	var wikiAbs string
+	switch source {
+	case "gcalendar":
+		if saved, err = (realtime.Gcalendar{}).SaveConfig(items); err != nil {
+			return err
+		}
+		wikiAbs, err = realtime.Gcalendar{}.WriteWikiPage(saved)
+		out["config_path"] = realtime.Gcalendar{}.ConfigPath()
+		out["calendars"] = saved
+	case "gmail":
+		if saved, err = (realtime.Gmail{}).SaveConfig(items); err != nil {
+			return err
+		}
+		wikiAbs, err = realtime.Gmail{}.WriteWikiPage(saved)
+		out["config_path"] = realtime.Gmail{}.ConfigPath()
+		out["labels"] = saved
+	case "slack":
+		if saved, err = (realtime.Slack{}).SaveConfig(items); err != nil {
+			return err
+		}
+		wikiAbs, err = realtime.Slack{}.WriteWikiPage(saved)
+		out["config_path"] = realtime.Slack{}.ConfigPath()
+		out["channels"] = saved
+		if (realtime.Slack{}).Global(saved) {
+			out["mode"] = "global"
+		} else {
+			out["mode"] = "filtered"
+		}
+	}
+	if err != nil {
+		return err
+	}
+	out["wiki_path_abs"] = wikiAbs
+	out["wiki_path"] = strings.TrimPrefix(wikiAbs, paths.WikiDir()+string(os.PathSeparator))
+	return emitJSON(out)
+}
+
+// parseRealtimeItems aceita um array JSON de objetos ou {key:[...]}.
+func parseRealtimeItems(raw []byte, key string) ([]map[string]string, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil, fmt.Errorf("itens vazios; passe --json ou --file")
+	}
+	var arr []map[string]any
+	if trimmed[0] == '[' {
+		if err := json.Unmarshal(trimmed, &arr); err != nil {
+			return nil, err
+		}
+	} else {
+		var obj map[string][]map[string]any
+		if err := json.Unmarshal(trimmed, &obj); err != nil {
+			return nil, err
+		}
+		arr = obj[key]
+	}
+	out := make([]map[string]string, 0, len(arr))
+	for _, m := range arr {
+		sm := map[string]string{}
+		for k, v := range m {
+			if s, ok := v.(string); ok {
+				sm[k] = s
+			}
+		}
+		out = append(out, sm)
+	}
+	return out, nil
 }
 
 func emitJSON(v any) error {
