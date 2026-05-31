@@ -1,90 +1,89 @@
 ---
 name: vbrain-add-realtime-knowledge
-description: Conecta uma fonte de "conhecimento realtime" ao vbrain (hoje: Google Calendar, Gmail e Slack via MCP). Cria uma página fantasma na wiki/_realtime/ com kind=realtime que casa no FTS5 e dispara handler ao vivo no /vbrain-query-knowledge. Use quando o usuário pedir "conecta meu gcalendar", "conecta meu gmail", "conecta meu slack", "adiciona meu calendário", "quero buscar agenda/email/slack junto", ou "vbrain-add-realtime-knowledge".
+description: Connects a "realtime knowledge" source to vbrain (today: Google Calendar, Gmail, and Slack via MCP). Creates a phantom page in wiki/_realtime/ with kind=realtime that matches in FTS5 and fires a live handler in /vbrain-query-knowledge. Use when the user asks "connect my gcalendar", "connect my gmail", "connect my slack", "add my calendar", "I want to search agenda/email/slack too", or "vbrain-add-realtime-knowledge".
 allowed-tools: Bash, Read, AskUserQuestion, mcp__claude_ai_Google_Calendar__list_calendars, mcp__claude_ai_Gmail__list_labels, mcp__claude_ai_Slack__slack_search_channels
 ---
 
 # vbrain-add-realtime-knowledge
 
-Registra uma fonte realtime no vbrain. O modelo: a wiki tem uma **página
-fantasma** por fonte (em `wiki/_realtime/<source>.md`, kind `realtime`) com
-keywords óbvias no body. Ela é indexada normalmente no FTS5; quando casa em
-uma query, o `/vbrain-query-knowledge` dispara o handler MCP correspondente
-ao vivo em vez de devolver o body.
+Registers a realtime source in vbrain. The model: the wiki has one **phantom
+page** per source (in `wiki/_realtime/<source>.md`, kind `realtime`) with obvious
+keywords in the body. It's indexed normally in FTS5; when it matches a query,
+`/vbrain-query-knowledge` fires the corresponding MCP handler live instead of
+returning the body.
 
 ## Inputs
 
-- **source** (opcional): qual fonte ativar. Hoje suportado: `gcalendar`, `gmail`,
-  `slack`. Se ausente, pergunte ao usuário via `AskUserQuestion`.
+- **source** (optional): which source to enable. Supported today: `gcalendar`,
+  `gmail`, `slack`. If absent, ask the user via `AskUserQuestion`.
 
-## Fontes suportadas
+## Supported sources
 
-| `source`    | Status      | Script determinístico                    |
+| `source`    | Status     | Deterministic command            |
 |---|---|---|
-| `gcalendar` | suportado   | `vbrain realtime gcalendar`      |
-| `gmail`     | suportado   | `vbrain realtime gmail`          |
-| `slack`     | suportado   | `vbrain realtime slack`          |
-| outro       | improvise   | pergunte ao usuário detalhes da conexão  |
+| `gcalendar` | supported  | `vbrain realtime gcalendar`      |
+| `gmail`     | supported  | `vbrain realtime gmail`          |
+| `slack`     | supported  | `vbrain realtime slack`          |
+| other       | improvise  | ask the user for connection details |
 
-## Passos
+## Steps
 
-### 1. Determinar a fonte
+### 1. Determine the source
 
-Se o usuário não passou `source`, use `AskUserQuestion`:
+If the user didn't pass `source`, use `AskUserQuestion`:
 
-> "Qual fonte realtime você quer conectar ao vbrain?"
+> "Which realtime source do you want to connect to vbrain?"
 > 1. Google Calendar (`gcalendar`)
 > 2. Gmail (`gmail`)
 > 3. Slack (`slack`)
-> 4. Outra (descreva)
+> 4. Other (describe)
 
-Se a resposta for "outra" ou um valor não suportado, peça ao usuário pra
-descrever a fonte. Pergunte se ele quer que você crie uma fonte
-determinística (com binário vbrain e teste) ou apenas uma página fantasma
-"manual" agora. Em caso de "manual", você pode escrever
-`wiki/_realtime/<slug>.md` diretamente com `kind: realtime` e os campos que
-fizerem sentido — mas avise que isso é uma fonte one-shot sem handler ao
-vivo, então só serve pra documentar.
+If the answer is "other" or an unsupported value, ask the user to describe the
+source. Ask whether they want you to create a deterministic source (with a
+vbrain binary and a test) or just a "manual" phantom page now. For "manual", you
+can write `wiki/_realtime/<slug>.md` directly with `kind: realtime` and whatever
+fields make sense — but warn that this is a one-shot source with no live handler,
+so it only serves to document.
 
-### 2. Fluxo `gcalendar`
+### 2. `gcalendar` flow
 
-**2a. Listar calendários disponíveis** via MCP:
+**2a. List available calendars** via MCP:
 
 ```
 mcp__claude_ai_Google_Calendar__list_calendars
 ```
 
-O retorno típico traz `id`, `summary`, `timeZone` (campos opcionais como
-`primary`, `accessRole`, `backgroundColor` podem aparecer dependendo da
-versão do MCP — não dependa deles). **Filtros que sempre aplique**, mesmo
-sem `AskUserQuestion`:
+The typical response carries `id`, `summary`, `timeZone` (optional fields like
+`primary`, `accessRole`, `backgroundColor` may appear depending on the MCP
+version — don't depend on them). **Filters to always apply**, even without
+`AskUserQuestion`:
 
-- Excluir calendários genéricos do Google: `id` casando
+- Exclude generic Google calendars: `id` matching
   `holiday@group.v.calendar.google.com`,
-  `*#holiday@group.v.calendar.google.com`, `addressbook#contacts@group.v.calendar.google.com`,
-  ou `summary` igual a "Birthdays" / "Aniversários".
-- Manter o resto como candidatos.
+  `*#holiday@group.v.calendar.google.com`,
+  `addressbook#contacts@group.v.calendar.google.com`, or `summary` equal to
+  "Birthdays" / "Aniversários".
+- Keep the rest as candidates.
 
-**2b. Perguntar ao usuário quais conectar.** Tente `AskUserQuestion` com
-`multiSelect: true` listando os candidatos (label = `summary` ou `id`,
-description = `id` curto + `timeZone`).
+**2b. Ask the user which to connect.** Try `AskUserQuestion` with
+`multiSelect: true` listing the candidates (label = `summary` or `id`,
+description = short `id` + `timeZone`).
 
-**Fallback se `AskUserQuestion` não estiver disponível** (sessões de agente
-sem o tool deferred): conecte **todos** os candidatos por default e avise
-explicitamente ao usuário no relatório final: "Conectei todos os calendários
-visíveis exceto os genéricos do Google. Pra refinar, rode
-`/vbrain-add-realtime-knowledge gcalendar` de novo numa sessão interativa
-ou edite manualmente `~/vbrain/config/realtime/gcalendar.yml` e rode
-`vbrain reindex`."
+**Fallback if `AskUserQuestion` isn't available** (agent sessions without the
+deferred tool): connect **all** candidates by default and explicitly warn the
+user in the final report: "I connected all visible calendars except the generic
+Google ones. To refine, run `/vbrain-add-realtime-knowledge gcalendar` again in
+an interactive session, or manually edit
+`~/vbrain/config/realtime/gcalendar.yml` and run `vbrain reindex`."
 
-**2c. Montar JSON e rodar o binário vbrain:**
+**2c. Build JSON and run the vbrain binary:**
 
 ```bash
 vbrain realtime gcalendar --json '<JSON>'
 ```
 
-Onde `<JSON>` é uma string JSON com a chave `calendars`, cada item
-`{"id": "...", "summary": "...", "timezone": "..."}`. Exemplo:
+Where `<JSON>` is a JSON string with the `calendars` key, each item
+`{"id": "...", "summary": "...", "timezone": "..."}`. Example:
 
 ```json
 {"calendars":[
@@ -93,63 +92,63 @@ Onde `<JSON>` é uma string JSON com a chave `calendars`, cada item
 ]}
 ```
 
-O script:
-1. Grava a config em `~/vbrain/config/realtime/gcalendar.yml`.
-2. Escreve a página fantasma em `~/vbrain/wiki/_realtime/gcalendar.md`.
-3. Retorna JSON com `config_path`, `wiki_path` e `calendars`.
+The command:
+1. Writes the config to `~/vbrain/config/realtime/gcalendar.yml`.
+2. Writes the phantom page to `~/vbrain/wiki/_realtime/gcalendar.md`.
+3. Returns JSON with `config_path`, `wiki_path`, and `calendars`.
 
-**2d. Reindexar** pra a página fantasma entrar no FTS5:
+**2d. Reindex** so the phantom page enters FTS5:
 
 ```bash
 vbrain reindex
 ```
 
-**2e. Commit (se houver repo git no `~/vbrain`):**
+**2e. Commit (if there's a git repo in `~/vbrain`):**
 
 ```bash
-vbrain commit --message "realtime: conecta gcalendar (<N> calendários)"
+vbrain commit --message "realtime: connect gcalendar (<N> calendars)"
 ```
 
-Onde `<N>` é o número de calendários conectados.
+Where `<N>` is the number of connected calendars.
 
-### 2bis. Fluxo `gmail`
+### 2bis. `gmail` flow
 
-**2bis-a. Verificar autenticação do MCP.** Tente `mcp__claude_ai_Gmail__list_labels`.
-Possíveis retornos:
+**2bis-a. Check the MCP's auth.** Try `mcp__claude_ai_Gmail__list_labels`.
+Possible returns:
 
-- JSON com `labels: [...]` → MCP autenticado. Siga pra 2bis-b.
-- Resposta tipo "ask the user to run /mcp and select 'claude.ai Gmail' to
-  authenticate" → MCP **não autenticado**. Pare e instrua o usuário:
-  > "Pra conectar o Gmail, abre `/mcp` no Claude Code, seleciona
-  > **claude.ai Gmail** e autoriza no navegador. Quando voltar, me chama
-  > de novo com `/vbrain-add-realtime-knowledge gmail`."
-  Não tente bypassar.
+- JSON with `labels: [...]` → MCP authenticated. Proceed to 2bis-b.
+- A response like "ask the user to run /mcp and select 'claude.ai Gmail' to
+  authenticate" → MCP **not authenticated**. Stop and instruct the user:
+  > "To connect Gmail, open `/mcp` in Claude Code, select **claude.ai Gmail**,
+  > and authorize in the browser. When you're back, call me again with
+  > `/vbrain-add-realtime-knowledge gmail`."
+  Don't try to bypass it.
 
-**2bis-b. Listar labels** via `mcp__claude_ai_Gmail__list_labels`.
-O retorno traz só **user labels** (`labelId` + `name`). System labels NÃO
-aparecem mas existem com IDs bem-conhecidos: `INBOX`, `IMPORTANT`, `STARRED`,
-`UNREAD`, `SENT`, `DRAFT`, `SPAM`, `TRASH`, `CHAT`.
+**2bis-b. List labels** via `mcp__claude_ai_Gmail__list_labels`. The response
+carries only **user labels** (`labelId` + `name`). System labels do NOT appear
+but exist with well-known IDs: `INBOX`, `IMPORTANT`, `STARRED`, `UNREAD`, `SENT`,
+`DRAFT`, `SPAM`, `TRASH`, `CHAT`.
 
-**2bis-c. Perguntar quais labels conectar.** Tente `AskUserQuestion` com
-`multiSelect: true` listando: as 3 system labels relevantes (`INBOX`,
-`IMPORTANT`, `STARRED`) + todos os user labels retornados. Label = `name`
-(ou ID para system), description = "system" ou "user".
+**2bis-c. Ask which labels to connect.** Try `AskUserQuestion` with
+`multiSelect: true` listing: the 3 relevant system labels (`INBOX`, `IMPORTANT`,
+`STARRED`) + all returned user labels. Label = `name` (or ID for system),
+description = "system" or "user".
 
-**Fallback se `AskUserQuestion` não estiver disponível**: conecte só
-`INBOX` + `IMPORTANT` por default e avise:
-> "Conectei INBOX + IMPORTANT. Pra refinar, edite
-> `~/vbrain/config/realtime/gmail.yml` (adicione objetos `{id, name}` à
-> chave `labels`) e rode `vbrain reindex`, ou rode
-> `/vbrain-add-realtime-knowledge gmail` numa sessão interativa."
+**Fallback if `AskUserQuestion` isn't available**: connect only `INBOX` +
+`IMPORTANT` by default and warn:
+> "I connected INBOX + IMPORTANT. To refine, edit
+> `~/vbrain/config/realtime/gmail.yml` (add `{id, name}` objects to the `labels`
+> key) and run `vbrain reindex`, or run `/vbrain-add-realtime-knowledge gmail`
+> in an interactive session."
 
-**2bis-d. Montar JSON e rodar o binário vbrain:**
+**2bis-d. Build JSON and run the vbrain binary:**
 
 ```bash
 vbrain realtime gmail --json '<JSON>'
 ```
 
-Onde `<JSON>` é uma string JSON com a chave `labels`, cada item
-`{"id": "...", "name": "..."}`. Exemplo:
+Where `<JSON>` is a JSON string with the `labels` key, each item
+`{"id": "...", "name": "..."}`. Example:
 
 ```json
 {"labels":[
@@ -159,103 +158,102 @@ Onde `<JSON>` é uma string JSON com a chave `labels`, cada item
 ]}
 ```
 
-O script grava `~/vbrain/config/realtime/gmail.yml` + página fantasma em
+The command writes `~/vbrain/config/realtime/gmail.yml` + the phantom page at
 `~/vbrain/wiki/_realtime/gmail.md`.
 
-**2bis-e. Reindexar e commitar** (mesmos comandos da seção gcalendar, troque
-a mensagem do commit por `"realtime: conecta gmail (<N> labels)"`).
+**2bis-e. Reindex and commit** (same commands as the gcalendar section, change
+the commit message to `"realtime: connect gmail (<N> labels)"`).
 
-### 2ter. Fluxo `slack`
+### 2ter. `slack` flow
 
-O Slack é diferente das outras fontes em dois pontos que ditam o fluxo:
+Slack differs from the other sources in two ways that dictate the flow:
 
-1. **Não dá pra "listar tudo"**: `slack_search_channels` exige um termo de
-   busca — não existe enumeração completa de canais como em calendars/labels.
-2. **O search do Slack não tem `OR`** (espaço = AND). Por isso o filtro
-   multi-canal não vira uma query só; o handler do query-knowledge faz **uma
-   busca por canal** e mescla (ver `/vbrain-query-knowledge`, seção 3c).
+1. **You can't "list everything"**: `slack_search_channels` requires a search
+   term — there's no full channel enumeration like calendars/labels.
+2. **Slack search has no `OR`** (space = AND). So the multi-channel filter
+   doesn't become a single query; the query-knowledge handler does **one search
+   per channel** and merges (see `/vbrain-query-knowledge`, section 3c).
 
-Por causa disso, a config aceita **lista vazia de canais = busca global** no
-workspace inteiro (todos os canais/DMs acessíveis). Lista preenchida = busca
-filtrada por esses canais.
+Because of this, the config accepts an **empty channel list = global search**
+across the whole workspace (all accessible channels/DMs). A populated list =
+a search filtered by those channels.
 
-**2ter-a. Verificar autenticação do MCP.** Tente
-`mcp__claude_ai_Slack__slack_search_channels` com um termo qualquer (ex.:
-`query: "general"`, `limit: 1`). Se o retorno for tipo "ask the user to run
-/mcp and select 'claude.ai Slack' to authenticate", o MCP **não está
-autenticado** — pare e instrua:
-> "Pra conectar o Slack, abre `/mcp` no Claude Code, seleciona
-> **claude.ai Slack** e autoriza no navegador. Quando voltar, me chama de
-> novo com `/vbrain-add-realtime-knowledge slack`."
-Não tente bypassar.
+**2ter-a. Check the MCP's auth.** Try `mcp__claude_ai_Slack__slack_search_channels`
+with any term (e.g. `query: "general"`, `limit: 1`). If the return is like "ask
+the user to run /mcp and select 'claude.ai Slack' to authenticate", the MCP is
+**not authenticated** — stop and instruct:
+> "To connect Slack, open `/mcp` in Claude Code, select **claude.ai Slack**, and
+> authorize in the browser. When you're back, call me again with
+> `/vbrain-add-realtime-knowledge slack`."
+Don't try to bypass it.
 
-**2ter-b. Perguntar o escopo** via `AskUserQuestion` (single select):
-> "Quais canais do Slack conectar?"
-> 1. Todos (workspace inteiro) — busca global, sem filtro de canal.
-> 2. Canais específicos — você me diz os nomes.
+**2ter-b. Ask for the scope** via `AskUserQuestion` (single select):
+> "Which Slack channels to connect?"
+> 1. All (whole workspace) — global search, no channel filter.
+> 2. Specific channels — you tell me the names.
 
-- Se **Todos**: `channels = []` (modo global). Pule pra 2ter-d.
-- Se **Canais específicos**: pergunte os nomes dos canais (texto livre, ex.:
-  "geral, produto, anúncios"). Para cada nome, chame
-  `mcp__claude_ai_Slack__slack_search_channels` com `query: "<nome>"`,
-  `channel_types: "public_channel,private_channel"`. Pegue o melhor match
-  (`id` + `name`). Se um nome não resolver, avise o usuário e siga com os que
-  resolveram. Monte a lista `channels` com `{id, name}`.
+- If **All**: `channels = []` (global mode). Skip to 2ter-d.
+- If **Specific channels**: ask for the channel names (free text, e.g.
+  "general, product, announcements"). For each name, call
+  `mcp__claude_ai_Slack__slack_search_channels` with `query: "<name>"`,
+  `channel_types: "public_channel,private_channel"`. Take the best match
+  (`id` + `name`). If a name doesn't resolve, warn the user and proceed with the
+  ones that did. Build the `channels` list with `{id, name}`.
 
-**Fallback se `AskUserQuestion` não estiver disponível**: conecte em modo
-**global** (`channels = []`) e avise:
-> "Conectei o Slack em modo global (busca no workspace inteiro). Pra
-> restringir a canais, rode `/vbrain-add-realtime-knowledge slack` numa
-> sessão interativa ou edite `~/vbrain/config/realtime/slack.yml` (adicione
-> objetos `{id, name}` à chave `channels`) e rode `vbrain reindex`."
+**Fallback if `AskUserQuestion` isn't available**: connect in **global** mode
+(`channels = []`) and warn:
+> "I connected Slack in global mode (search the whole workspace). To restrict to
+> channels, run `/vbrain-add-realtime-knowledge slack` in an interactive session
+> or edit `~/vbrain/config/realtime/slack.yml` (add `{id, name}` objects to the
+> `channels` key) and run `vbrain reindex`."
 
-**2ter-c. Montar JSON e rodar o binário vbrain:**
+**2ter-c. Build JSON and run the vbrain binary:**
 
 ```bash
 vbrain realtime slack --json '<JSON>'
 ```
 
-Onde `<JSON>` é uma string JSON com a chave `channels`, cada item
-`{"id": "...", "name": "..."}`. Para modo global, passe `{"channels":[]}`.
-Exemplos:
+Where `<JSON>` is a JSON string with the `channels` key, each item
+`{"id": "...", "name": "..."}`. For global mode, pass `{"channels":[]}`.
+Examples:
 
 ```json
 {"channels":[]}
 ```
 ```json
 {"channels":[
-  {"id":"C0GERAL","name":"geral"},
-  {"id":"C0PROD","name":"produto"}
+  {"id":"C0GERAL","name":"general"},
+  {"id":"C0PROD","name":"product"}
 ]}
 ```
 
-O script grava `~/vbrain/config/realtime/slack.yml` + página fantasma em
-`~/vbrain/wiki/_realtime/slack.md` e retorna JSON com `mode`
-(`global`|`filtered`), `config_path`, `wiki_path` e `channels`.
+The command writes `~/vbrain/config/realtime/slack.yml` + the phantom page at
+`~/vbrain/wiki/_realtime/slack.md` and returns JSON with `mode`
+(`global`|`filtered`), `config_path`, `wiki_path`, and `channels`.
 
-**2ter-d. Reindexar e commitar** (mesmos comandos da seção gcalendar, troque
-a mensagem do commit por `"realtime: conecta slack (<modo>)"`, onde `<modo>`
-é "global" ou "<N> canais").
+**2ter-d. Reindex and commit** (same commands as the gcalendar section, change
+the commit message to `"realtime: connect slack (<mode>)"`, where `<mode>` is
+"global" or "<N> channels").
 
-### 3. Reportar
+### 3. Report
 
-Mostre ao usuário:
-- Lista de calendários/labels/canais conectados (ou "modo global" pro slack)
-- Path da config (`~/vbrain/config/realtime/<source>.yml`)
-- Path da página fantasma (`wiki/_realtime/<source>.md`)
-- Próximo passo: "agora pergunte algo como 'tenho reunião amanhã?' (gcalendar),
-  'algum email do cliente X esta semana?' (gmail) ou 'o que falaram no slack
-  sobre o deploy?' (slack) no `/vbrain-query-knowledge` — vou puxar ao vivo."
+Show the user:
+- The list of connected calendars/labels/channels (or "global mode" for slack)
+- The config path (`~/vbrain/config/realtime/<source>.yml`)
+- The phantom page path (`wiki/_realtime/<source>.md`)
+- Next step: "now ask something like 'do I have a meeting tomorrow?' (gcalendar),
+  'any email from client X this week?' (gmail), or 'what did people say on Slack
+  about the deploy?' (slack) in `/vbrain-query-knowledge` — I'll pull it live."
 
-## Regras
+## Rules
 
-- **Nunca** busque dados (eventos, emails) durante essa skill — ela é só
-  configuração. Listar calendários/labels é OK; buscar eventos/threads é
-  responsabilidade do `/vbrain-query-knowledge`.
-- **Nunca** escreva em `wiki/_realtime/` na mão pra fontes suportadas
-  (gcalendar/gmail/slack): sempre vai pelo binário vbrain. Pra fontes "outra" sem
-  script, escrever direto é OK mas avise o usuário que sem handler não vai
-  resolver ao vivo.
-- Se o MCP da fonte falhar (não conectado, sem permissão), pare e oriente
-  o usuário a abrir `/mcp` no Claude Code pra autorizar antes de re-rodar.
-  Não tente bypassar a autenticação.
+- **Never** fetch data (events, emails) during this skill — it's configuration
+  only. Listing calendars/labels is OK; fetching events/threads is
+  `/vbrain-query-knowledge`'s job.
+- **Never** write into `wiki/_realtime/` by hand for supported sources
+  (gcalendar/gmail/slack): always go through the vbrain binary. For "other"
+  sources with no command, writing directly is OK but warn the user that without
+  a handler it won't resolve live.
+- If the source's MCP fails (not connected, no permission), stop and guide the
+  user to open `/mcp` in Claude Code to authorize before re-running. Don't try
+  to bypass the authentication.
