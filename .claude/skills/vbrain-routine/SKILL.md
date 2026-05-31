@@ -26,7 +26,7 @@ sozinho a cada 15 minutos.
 ### 1. Tick: claim de rotinas vencidas
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/run_due_routines.rb
+bundle exec ruby scripts/run_due_routines.rb
 ```
 
 Esse script é **determinístico** e atômico:

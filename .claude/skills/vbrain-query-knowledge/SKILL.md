@@ -31,7 +31,7 @@ próprio, um slug). Faça-o quando for pergunta em linguagem natural.
 1. Puxe o vocabulário real de tags da base:
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/tags.rb --limit 60
+bundle exec ruby scripts/tags.rb --limit 60
 ```
 
 (`tags.rb` já devolve JSON no stdout — não tem `--format`.)
@@ -49,7 +49,7 @@ BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Us
 ### 1. FTS5
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/query.rb "<query>" --limit <N> --source-query "<pergunta original>" --format json
+bundle exec ruby scripts/query.rb "<query>" --limit <N> --source-query "<pergunta original>" --format json
 ```
 
 Parseie `results`. Cada item tem `path`, `title`, `kind`, `snippet`.
@@ -61,7 +61,7 @@ Se `results` vier vazio, tente o passo 2 (prefix). Caso contrário pule pro 3.
 ### 2. Fallback com prefix matching
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/query.rb "<query>" --limit <N> --prefix --no-log --format json
+bundle exec ruby scripts/query.rb "<query>" --limit <N> --prefix --no-log --format json
 ```
 
 (`--no-log` aqui: o passo 1 já registrou a intenção; o retry com prefix não

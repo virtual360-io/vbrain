@@ -80,7 +80,7 @@ ou edite manualmente `~/vbrain/config/realtime/gcalendar.yml` e rode
 **2c. Montar JSON e rodar o script Ruby:**
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/add_realtime/gcalendar.rb --calendars-json '<JSON>'
+bundle exec ruby scripts/add_realtime/gcalendar.rb --calendars-json '<JSON>'
 ```
 
 Onde `<JSON>` é uma string JSON com a chave `calendars`, cada item
@@ -101,13 +101,13 @@ O script:
 **2d. Reindexar** pra a página fantasma entrar no FTS5:
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/reindex.rb
+bundle exec ruby scripts/reindex.rb
 ```
 
 **2e. Commit (se houver repo git no `~/vbrain`):**
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/commit.rb --message "realtime: conecta gcalendar (<N> calendários)"
+bundle exec ruby scripts/commit.rb --message "realtime: conecta gcalendar (<N> calendários)"
 ```
 
 Onde `<N>` é o número de calendários conectados.
@@ -145,7 +145,7 @@ aparecem mas existem com IDs bem-conhecidos: `INBOX`, `IMPORTANT`, `STARRED`,
 **2bis-d. Montar JSON e rodar o script Ruby:**
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/add_realtime/gmail.rb --labels-json '<JSON>'
+bundle exec ruby scripts/add_realtime/gmail.rb --labels-json '<JSON>'
 ```
 
 Onde `<JSON>` é uma string JSON com a chave `labels`, cada item
@@ -212,7 +212,7 @@ Não tente bypassar.
 **2ter-c. Montar JSON e rodar o script Ruby:**
 
 ```bash
-BUNDLE_GEMFILE=/Users/victorcampos/Workspace/vbrain/Gemfile bundle exec ruby /Users/victorcampos/Workspace/vbrain/scripts/add_realtime/slack.rb --channels-json '<JSON>'
+bundle exec ruby scripts/add_realtime/slack.rb --channels-json '<JSON>'
 ```
 
 Onde `<JSON>` é uma string JSON com a chave `channels`, cada item
