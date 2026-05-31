@@ -1,5 +1,5 @@
-// Package ftsquery normaliza consultas em linguagem natural para a sintaxe
-// MATCH do FTS5. Porta determinística de lib/vbrain/fts_query.rb.
+// Package ftsquery normalizes natural-language queries into FTS5 MATCH syntax.
+// Deterministic port of lib/vbrain/fts_query.rb.
 package ftsquery
 
 import (
@@ -7,16 +7,17 @@ import (
 	"strings"
 )
 
-// stopChars são caracteres com significado na sintaxe do FTS5 (aspas, dois
-// pontos, parênteses etc.); neutralizados para espaço antes de tokenizar.
+// stopChars are characters meaningful to FTS5 syntax (quotes, colon,
+// parentheses, etc.); neutralized to spaces before tokenizing.
 var stopChars = regexp.MustCompile("[\":()\\[\\]{}<>!?,;`]")
 
 var whitespace = regexp.MustCompile(`\s+`)
 
-// stopwords PT-BR (+ algumas EN comuns): palavras-função, pronomes,
-// interrogativas e auxiliares de alta frequência. Sob OR elas afogam o sinal
-// no BM25, então filtramos antes de montar a query. Inclui formas com e sem
-// acento porque o token preserva o acento original.
+// stopwords (PT-BR + some common EN): function words, pronouns, interrogatives,
+// and high-frequency auxiliaries. Under OR they drown the signal in BM25, so we
+// filter them before building the query. Kept in Portuguese on purpose — they
+// exist to handle Portuguese queries — and include accented and unaccented
+// forms because the token preserves the original accent.
 var stopwords = map[string]bool{}
 
 func init() {
@@ -39,8 +40,8 @@ func init() {
 	}
 }
 
-// Normalize devolve a expressão MATCH (tokens entre aspas unidos por OR), ou
-// "" para entrada vazia. Em prefix mode, cada token vira `"tok"*`.
+// Normalize returns the MATCH expression (quoted tokens joined by OR), or "" for
+// empty input. In prefix mode, each token becomes `"tok"*`.
 func Normalize(query string, prefix bool) string {
 	cleaned := stopChars.ReplaceAllString(query, " ")
 	tokens := splitNonEmpty(cleaned)
@@ -54,8 +55,8 @@ func Normalize(query string, prefix bool) string {
 			kept = append(kept, t)
 		}
 	}
-	// Se só sobraram stopwords (ex.: "quem é você"), cair pros tokens
-	// originais é melhor que devolver vazio (zero hits).
+	// If only stopwords remained (e.g. "quem é você"), falling back to the
+	// original tokens is better than returning empty (zero hits).
 	if len(kept) > 0 {
 		tokens = kept
 	}

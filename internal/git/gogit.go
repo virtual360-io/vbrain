@@ -12,9 +12,9 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
-// gogitBackend implementa as operações de escrita com go-git puro-Go (fallback
-// quando não há git no sistema). Push usa GITHUB_TOKEN (go-git não lê credential
-// helpers do sistema).
+// gogitBackend implements the write operations with pure-Go go-git (fallback
+// when there's no system git). Push uses GITHUB_TOKEN (go-git doesn't read the
+// system's credential helpers).
 type gogitBackend struct{}
 
 func (gogitBackend) Init(dir string) error {
@@ -100,8 +100,8 @@ func (gogitBackend) AddRemote(url, dir, name string) error {
 	return err
 }
 
-// authorSignature usa a identidade git global do usuário, com fallback para uma
-// identidade vbrain quando não configurada (go-git exige author no commit).
+// authorSignature uses the user's global git identity, falling back to a vbrain
+// identity when not configured (go-git requires an author on commit).
 func authorSignature() *object.Signature {
 	name, email := "vbrain", "vbrain@localhost"
 	if cfg, err := config.LoadConfig(config.GlobalScope); err == nil {

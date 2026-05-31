@@ -18,22 +18,22 @@ import (
 	"time"
 )
 
-// Twitter é a fonte para tweets/X (lidos via API pública de syndication).
+// Twitter is the source for tweets/X (read via the public syndication API).
 type Twitter struct{}
 
 var tweetURLRE = regexp.MustCompile(
 	`(?i)^(?:https?://)?(?:www\.|m\.|mobile\.)?(?:twitter\.com|x\.com)/(?P<user>[A-Za-z0-9_]+)/status/(?P<id>\d+)`,
 )
 
-// ErrNotTweet sinaliza URL que não é de tweet (espelha Twitter::FetchError no
-// contexto de parse_id).
+// ErrNotTweet signals a URL that isn't a tweet (mirrors Twitter::FetchError in
+// the parse_id context).
 var ErrNotTweet = errors.New("not a tweet URL")
 
 func (Twitter) KindKey() string { return "tweet" }
 
 func (Twitter) Detect(input string) bool { return tweetURLRE.MatchString(input) }
 
-// ParseID extrai o id numérico do status de uma URL de tweet.
+// ParseID extracts the numeric status id from a tweet URL.
 func (Twitter) ParseID(rawURL string) (string, error) {
 	m := tweetURLRE.FindStringSubmatch(rawURL)
 	if m == nil {
@@ -42,9 +42,9 @@ func (Twitter) ParseID(rawURL string) (string, error) {
 	return m[tweetURLRE.SubexpIndex("id")], nil
 }
 
-// ComputeToken reproduz o token determinístico que a API de syndication espera:
-// id/1e15*PI, formatado como o Float#to_s do Ruby, sem zeros à direita e sem o
-// ponto.
+// ComputeToken reproduces the deterministic token the syndication API expects:
+// id/1e15*PI, formatted like Ruby's Float#to_s, without trailing zeros and
+// without the dot.
 func (Twitter) ComputeToken(id string) string {
 	idInt, _ := strconv.ParseInt(id, 10, 64)
 	n := float64(idInt) / 1e15 * math.Pi
@@ -62,8 +62,8 @@ const (
 	syndicationTimeout = 10 * time.Second
 )
 
-// FetchSyndication busca o JSON do tweet via API pública de syndication. Var de
-// pacote para override determinístico nos testes.
+// FetchSyndication fetches the tweet JSON via the public syndication API. A
+// package var for deterministic override in tests.
 var FetchSyndication = func(id string) (string, error) {
 	token := (Twitter{}).ComputeToken(id)
 	u := syndicationURL + "?id=" + id + "&lang=en&token=" + token
@@ -86,7 +86,7 @@ var FetchSyndication = func(id string) (string, error) {
 	return string(body), nil
 }
 
-// CopyToRaw busca o JSON do tweet e grava em raw/.
+// CopyToRaw fetches the tweet JSON and writes it into raw/.
 func (Twitter) CopyToRaw(input, rawDir, timestamp string) (RawInfo, error) {
 	id, err := (Twitter{}).ParseID(input)
 	if err != nil {
@@ -111,8 +111,9 @@ func (Twitter) CopyToRaw(input, rawDir, timestamp string) (RawInfo, error) {
 	}, nil
 }
 
-// Extract renderiza o markdown do tweet (do cache em info, ou buscando). Se o
-// tweet tem artigo embutido, tenta o grab completo via Playwright (best-effort).
+// Extract renders the tweet markdown (from the cache in info, or by fetching).
+// If the tweet has an embedded article, it attempts the full grab via headless
+// Chrome (best-effort).
 func (Twitter) Extract(input, outPath string, info RawInfo) error {
 	id := info.TweetID
 	if id == "" {
@@ -146,9 +147,9 @@ func (Twitter) Extract(input, outPath string, info RawInfo) error {
 	return os.WriteFile(outPath, []byte(md), 0o644)
 }
 
-// ExtractFromJSON renderiza o markdown da página a partir do JSON do tweet. Se
-// articleFullText (>500 chars) for fornecido, embute o corpo do artigo; senão
-// usa o preview_text público.
+// ExtractFromJSON renders the page markdown from the tweet JSON. If
+// articleFullText (>500 chars) is provided, it embeds the article body;
+// otherwise it uses the public preview_text.
 func (Twitter) ExtractFromJSON(jsonStr, url, id, articleFullText string) (string, error) {
 	data, err := decodeJSON(jsonStr)
 	if err != nil {
@@ -200,7 +201,7 @@ func (Twitter) ExtractFromJSON(jsonStr, url, id, articleFullText string) (string
 	if titleName == "" && hasHandle {
 		titleName = asStr(handle)
 	}
-	title := "Tweet de " + titleName + " (" + asStr(createdAt) + ")"
+	title := "Tweet by " + titleName + " (" + asStr(createdAt) + ")"
 
 	var lines []string
 	add := func(s string) { lines = append(lines, s) }
@@ -210,29 +211,29 @@ func (Twitter) ExtractFromJSON(jsonStr, url, id, articleFullText string) (string
 	add("- Source URL: " + url)
 	add("- Tweet ID: " + id)
 	if hasHandle {
-		add("- Autor: " + name + " (@" + asStr(handle) + ")")
+		add("- Author: " + name + " (@" + asStr(handle) + ")")
 	}
 	if hasCreatedAt {
-		add("- Data: " + asStr(createdAt))
+		add("- Date: " + asStr(createdAt))
 	}
 	if hasLang {
-		add("- Idioma: " + asStr(lang))
+		add("- Language: " + asStr(lang))
 	}
 	if hasFavorites {
-		add("- Likes (no momento da ingestão): " + asStr(favorites))
+		add("- Likes (at ingestion time): " + asStr(favorites))
 	}
 	add("")
-	add("## Texto do tweet")
+	add("## Tweet text")
 	add("")
 	if strings.TrimSpace(textExpanded) == "" {
-		add("(tweet sem texto — apenas mídia ou link)")
+		add("(tweet with no text — media or link only)")
 	} else {
 		add(strings.TrimSpace(textExpanded))
 	}
 	add("")
 
 	if len(urls) > 0 {
-		add("## Links citados")
+		add("## Cited links")
 		add("")
 		for _, u := range urls {
 			add("- [" + u.display + "](" + u.expanded + ")")
@@ -241,7 +242,7 @@ func (Twitter) ExtractFromJSON(jsonStr, url, id, articleFullText string) (string
 	}
 
 	if len(media) > 0 {
-		add("## Mídia")
+		add("## Media")
 		add("")
 		for _, m := range media {
 			add("- " + m.typ + ": " + m.url)
@@ -252,25 +253,25 @@ func (Twitter) ExtractFromJSON(jsonStr, url, id, articleFullText string) (string
 	articleTitle := asStr(article["title"])
 	articlePreview, hasPreview := article["preview_text"]
 	if hasArticle && (articleTitle != "" || hasPreview) {
-		add("## Artigo embutido")
+		add("## Embedded article")
 		add("")
 		if article["title"] != nil {
-			add("- Artigo título: " + strings.TrimSpace(articleTitle))
+			add("- Article title: " + strings.TrimSpace(articleTitle))
 		}
 		if article["rest_id"] != nil {
-			add("- Artigo ID: " + asStr(article["rest_id"]))
+			add("- Article ID: " + asStr(article["rest_id"]))
 		}
 		add("")
 		if len(articleFullText) > 500 {
 			cleaned := cleanArticleText(articleFullText, articleTitle)
-			add("**Body completo** (extraído via Playwright + Chrome do sistema):")
+			add("**Full body** (extracted via headless Chrome):")
 			add("")
 			add("```")
 			add(cleaned)
 			add("```")
 			add("")
 		} else {
-			add("**Nota**: o body completo do artigo só é acessível com auth no X ou via Playwright/Chrome real. O texto abaixo é o `preview_text` (~200 chars) entregue pelo syndication público — use como excerpt literal, não infira o resto.")
+			add("**Note**: the article's full body is only accessible with auth on X or via a real headless Chrome. The text below is the `preview_text` (~200 chars) delivered by the public syndication API — use it as a literal excerpt, don't infer the rest.")
 			add("")
 			if hasPreview {
 				add("```")
@@ -286,8 +287,8 @@ func (Twitter) ExtractFromJSON(jsonStr, url, id, articleFullText string) (string
 
 var multiNewlineRE = regexp.MustCompile(`\n{3,}`)
 
-// CleanArticleText remove o boilerplate do X de um texto de artigo bruto,
-// ancorando no título quando presente.
+// CleanArticleText strips the X boilerplate from a raw article text, anchoring
+// on the title when present.
 func (Twitter) CleanArticleText(raw, title string) string { return cleanArticleText(raw, title) }
 
 func cleanArticleText(raw, title string) string {
@@ -312,7 +313,7 @@ func cleanArticleText(raw, title string) string {
 	return strings.TrimSpace(multiNewlineRE.ReplaceAllString(text, "\n\n"))
 }
 
-// --- helpers de JSON (UseNumber, então números viram json.Number) ---
+// --- JSON helpers (UseNumber, so numbers become json.Number) ---
 
 func decodeJSON(s string) (map[string]any, error) {
 	dec := json.NewDecoder(bytes.NewReader([]byte(s)))

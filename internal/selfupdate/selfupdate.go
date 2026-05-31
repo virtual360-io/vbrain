@@ -1,5 +1,6 @@
-// Package selfupdate baixa o binário vbrain mais recente da release rolling
-// "latest" no GitHub e substitui o executável em uso (verificando o SHA256).
+// Package selfupdate downloads the latest vbrain binary from the rolling
+// "latest" GitHub release and replaces the running executable (verifying the
+// SHA256).
 package selfupdate
 
 import (
@@ -15,14 +16,14 @@ import (
 	"time"
 )
 
-// Repo é o repositório de releases do vbrain.
+// Repo is vbrain's release repository.
 const Repo = "virtual360-io/vbrain"
 
-// DefaultBaseURL aponta pra tag rolling "latest" (independe da flag prerelease,
-// ao contrário de /releases/latest/).
+// DefaultBaseURL points at the rolling "latest" tag (independent of the
+// prerelease flag, unlike /releases/latest/).
 var DefaultBaseURL = "https://github.com/" + Repo + "/releases/download/latest"
 
-// Result resume o update (JSON no stdout).
+// Result summarizes the update (JSON on stdout).
 type Result struct {
 	Asset   string `json:"asset"`
 	Path    string `json:"path"`
@@ -30,7 +31,7 @@ type Result struct {
 	Updated bool   `json:"updated"`
 }
 
-// AssetName devolve o nome do binário pra plataforma atual (ex.:
+// AssetName returns the binary name for the current platform (e.g.
 // vbrain-linux-amd64, vbrain-windows-amd64.exe).
 func AssetName() string {
 	n := "vbrain-" + runtime.GOOS + "-" + runtime.GOARCH
@@ -40,7 +41,7 @@ func AssetName() string {
 	return n
 }
 
-// Run atualiza o executável atual a partir da release latest.
+// Run updates the current executable from the latest release.
 func Run() (Result, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -52,8 +53,9 @@ func Run() (Result, error) {
 	return update(exe, DefaultBaseURL, &http.Client{Timeout: 60 * time.Second})
 }
 
-// update baixa AssetName() de baseURL, confere o SHA256 (de SHA256SUMS) e troca
-// o binário em targetPath atomicamente. Parametrizado para teste.
+// update downloads AssetName() from baseURL, checks the SHA256 (from
+// SHA256SUMS), and swaps the binary at targetPath atomically. Parameterized for
+// testing.
 func update(targetPath, baseURL string, client *http.Client) (Result, error) {
 	asset := AssetName()
 
@@ -69,7 +71,7 @@ func update(targetPath, baseURL string, client *http.Client) (Result, error) {
 	sum := sha256.Sum256(data)
 	got := hex.EncodeToString(sum[:])
 	if got != want {
-		return Result{}, fmt.Errorf("sha256 não confere para %s: esperado %s, baixado %s", asset, want, got)
+		return Result{}, fmt.Errorf("sha256 mismatch for %s: expected %s, downloaded %s", asset, want, got)
 	}
 
 	if err := replaceBinary(targetPath, data); err != nil {
@@ -78,11 +80,11 @@ func update(targetPath, baseURL string, client *http.Client) (Result, error) {
 	return Result{Asset: asset, Path: targetPath, SHA256: got, Updated: true}, nil
 }
 
-// wantedSHA busca SHA256SUMS e extrai o hash do asset.
+// wantedSHA fetches SHA256SUMS and extracts the asset's hash.
 func wantedSHA(client *http.Client, baseURL, asset string) (string, error) {
 	sums, err := fetch(client, baseURL+"/SHA256SUMS")
 	if err != nil {
-		return "", fmt.Errorf("não consegui baixar SHA256SUMS: %w", err)
+		return "", fmt.Errorf("could not download SHA256SUMS: %w", err)
 	}
 	for _, line := range strings.Split(string(sums), "\n") {
 		f := strings.Fields(line)
@@ -90,7 +92,7 @@ func wantedSHA(client *http.Client, baseURL, asset string) (string, error) {
 			return f[0], nil
 		}
 	}
-	return "", fmt.Errorf("asset %s ausente no SHA256SUMS", asset)
+	return "", fmt.Errorf("asset %s missing from SHA256SUMS", asset)
 }
 
 func fetch(client *http.Client, url string) ([]byte, error) {
@@ -100,14 +102,14 @@ func fetch(client *http.Client, url string) ([]byte, error) {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d para %s", res.StatusCode, url)
+		return nil, fmt.Errorf("HTTP %d for %s", res.StatusCode, url)
 	}
 	return io.ReadAll(res.Body)
 }
 
-// replaceBinary grava o novo binário sobre targetPath atomicamente. Escreve num
-// tmp no mesmo diretório (mesmo filesystem → rename atômico). No Windows, move o
-// atual pra .old antes (não dá pra renomear sobre um exe em uso).
+// replaceBinary writes the new binary over targetPath atomically. It writes to a
+// tmp file in the same directory (same filesystem → atomic rename). On Windows
+// it moves the current one to .old first (you can't rename over a running exe).
 func replaceBinary(targetPath string, data []byte) error {
 	dir := filepath.Dir(targetPath)
 	tmp, err := os.CreateTemp(dir, ".vbrain-new-*")
@@ -138,7 +140,7 @@ func replaceBinary(targetPath string, data []byte) error {
 			os.Rename(old, targetPath) // rollback
 			return err
 		}
-		os.Remove(old) // best-effort (pode falhar se ainda em uso)
+		os.Remove(old) // best-effort (may fail if still in use)
 		return nil
 	}
 	return os.Rename(tmpPath, targetPath)

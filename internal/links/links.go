@@ -1,6 +1,6 @@
-// Package links faz o parse determinístico de links entre páginas. A LLM
-// escreve `[[Título]]` (autoria); linkify converte os resolvíveis para
-// `[Título](slug.md)`. Porta de lib/vbrain/links.rb.
+// Package links does the deterministic parsing of links between pages. The LLM
+// writes `[[Title]]` (authoring form); linkify converts the resolvable ones into
+// `[Title](slug.md)`. Port of lib/vbrain/links.rb.
 package links
 
 import (
@@ -13,19 +13,19 @@ import (
 
 var (
 	wikilinkRE = regexp.MustCompile(`\[\[([^\]\[]+)\]\]`)
-	// Link markdown apontando para um .md local (a forma linkificada).
+	// Markdown link pointing to a local .md (the linkified form).
 	mdlinkRE = regexp.MustCompile(`\[([^\]]+)\]\(([^)\s]+\.md)\)`)
 )
 
-// Link é uma aresta de saída: slug do alvo + título de exibição.
+// Link is an outgoing edge: target slug + display title.
 type Link struct {
 	Slug  string
 	Title string
 }
 
-// Extract devolve os links de saída do body em ambas as formas (`[[Título]]` e
-// `[texto](slug.md)`), deduplicados por slug e em ordem. Suporta alias
-// `[[Alvo|texto]]` (slug/título vêm do alvo).
+// Extract returns the body's outgoing links in both forms (`[[Title]]` and
+// `[text](slug.md)`), deduplicated by slug and in order. Supports the
+// `[[Target|text]]` alias (slug/title come from the target).
 func Extract(body string) []Link {
 	var out []Link
 	seen := map[string]bool{}
@@ -57,8 +57,8 @@ func Extract(body string) []Link {
 	return out
 }
 
-// targetSlug normaliza um alvo para o slug ASCII que write_pages usa como nome
-// de arquivo. Slug inválido → "" (não-resolvível).
+// targetSlug normalizes a target into the ASCII slug that write-pages uses as
+// the file name. Invalid slug → "" (unresolvable).
 func targetSlug(target string) string {
 	s, err := slug.From(target)
 	if err != nil {
@@ -67,8 +67,8 @@ func targetSlug(target string) string {
 	return s
 }
 
-// Linkify reescreve cada `[[Título]]` cujo slug existe em existingSlugs como
-// link markdown clicável. Não-resolvíveis ficam intactos. Idempotente.
+// Linkify rewrites each `[[Title]]` whose slug exists in existingSlugs into a
+// clickable markdown link. Unresolvable ones are left intact. Idempotent.
 func Linkify(body string, existingSlugs []string) string {
 	set := map[string]bool{}
 	for _, s := range existingSlugs {
@@ -83,9 +83,9 @@ func Linkify(body string, existingSlugs []string) string {
 	})
 }
 
-// ApplyResolution aplica um mapa {título => slug} produzido pela camada de
-// julgamento (LLM): reescreve `[[Título]]` → `[texto](slug.md)` quando o título
-// está no mapa com slug não-vazio. Idempotente. Aqui só APLICAMOS (Regra 5).
+// ApplyResolution applies a {title => slug} map produced by the judgment layer
+// (LLM): rewrites `[[Title]]` → `[text](slug.md)` when the title is in the map
+// with a non-empty slug. Idempotent. Here we only APPLY (Rule 5).
 func ApplyResolution(body string, mapping map[string]string) string {
 	if len(mapping) == 0 {
 		return body
@@ -98,12 +98,12 @@ func ApplyResolution(body string, mapping map[string]string) string {
 	})
 }
 
-// transformWikilinks aplica repl a cada wikilink. repl recebe alvo e texto de
-// exibição (alias após `|`, ou o próprio alvo) e devolve (substituição, ok); se
-// ok=false o wikilink fica intacto.
+// transformWikilinks applies repl to each wikilink. repl receives the target and
+// display text (alias after `|`, or the target itself) and returns
+// (replacement, ok); if ok=false the wikilink is left intact.
 func transformWikilinks(body string, repl func(target, display string) (string, bool)) string {
 	return wikilinkRE.ReplaceAllStringFunc(body, func(whole string) string {
-		inner := whole[2 : len(whole)-2] // tira [[ ]]
+		inner := whole[2 : len(whole)-2] // strip [[ ]]
 		parts := strings.SplitN(inner, "|", 2)
 		target := strings.TrimSpace(parts[0])
 		display := target

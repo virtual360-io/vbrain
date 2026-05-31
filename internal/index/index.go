@@ -1,5 +1,5 @@
-// Package index reconstrói o índice SQLite a partir da wiki em disco (a fonte
-// da verdade). Porta determinística de scripts/reindex.rb.
+// Package index rebuilds the SQLite index from the on-disk wiki (the source of
+// truth). Deterministic port of scripts/reindex.rb.
 package index
 
 import (
@@ -15,7 +15,7 @@ import (
 	"github.com/virtual360-io/vbrain/internal/paths"
 )
 
-// Stats resume o resultado de um reindex.
+// Stats summarizes the result of a reindex.
 type Stats struct {
 	Inserted int `json:"inserted"`
 	Updated  int `json:"updated"`
@@ -31,8 +31,9 @@ var kindSet = func() map[string]bool {
 	return m
 }()
 
-// Reindex sincroniza o índice com os .md de wikiDir: insere novos, atualiza por
-// sha256, remove os ausentes e reconstrói o grafo de links. Idempotente.
+// Reindex syncs the index with the .md files in wikiDir: inserts new ones,
+// updates by sha256, removes missing ones, and rebuilds the link graph.
+// Idempotent.
 func Reindex(db *sql.DB, wikiDir string) (Stats, error) {
 	var st Stats
 
@@ -57,8 +58,8 @@ func Reindex(db *sql.DB, wikiDir string) (Stats, error) {
 		}
 		kind := asString(fm["kind"])
 		if !kindSet[kind] {
-			// Layout plano: confia no frontmatter; _realtime é realtime por
-			// construção, o resto default note.
+			// Flat layout: trust the frontmatter; _realtime is realtime by
+			// construction, everything else defaults to note.
 			if strings.SplitN(rel, "/", 2)[0] == paths.RealtimeDir {
 				kind = "realtime"
 			} else {
@@ -119,7 +120,7 @@ func collectMarkdown(wikiDir string) ([]string, error) {
 		}
 		return nil
 	})
-	sort.Strings(out) // determinístico
+	sort.Strings(out) // deterministic
 	return out, err
 }
 
@@ -149,8 +150,9 @@ func deleteMissing(db *sql.DB, onDisk map[string]bool) (int, error) {
 	return len(toDelete), nil
 }
 
-// rebuildLinks recria o grafo do zero: extrai links de cada body e resolve o
-// slug-alvo contra as páginas existentes (NULL = forward link não-resolvido).
+// rebuildLinks recreates the graph from scratch: extracts links from each body
+// and resolves the target slug against existing pages (NULL = unresolved
+// forward link).
 func rebuildLinks(db *sql.DB) (int, error) {
 	type pg struct {
 		id   int64
@@ -204,7 +206,7 @@ func asString(v any) string {
 	return ""
 }
 
-// joinTags reproduz Array(fm["tags"]).join(",").
+// joinTags reproduces Array(fm["tags"]).join(",").
 func joinTags(v any) string {
 	switch x := v.(type) {
 	case nil:

@@ -1,5 +1,5 @@
-// Package maint reúne as operações determinísticas de manutenção/insight da
-// base: vocabulário de tags, stats, fila do query_log e linkify. Porta de
+// Package maint groups the deterministic maintenance/insight operations on the
+// base: tag vocabulary, stats, the query_log queue, and linkify. Port of
 // scripts/{tags,stats,query_log,linkify}.rb.
 package maint
 
@@ -26,8 +26,8 @@ type TagsResult struct {
 	Tags          []TagCount `json:"tags"`
 }
 
-// Tags conta o vocabulário de tags (pages.tags é CSV) ordenado por contagem
-// desc, depois alfabético. limit<=0 = todas.
+// Tags counts the tag vocabulary (pages.tags is CSV) ordered by count desc, then
+// alphabetically. limit<=0 = all.
 func Tags(db *sql.DB, limit int) (TagsResult, error) {
 	rows, err := db.Query("SELECT tags FROM pages")
 	if err != nil {
@@ -128,7 +128,7 @@ type QueryLogDumpResult struct {
 	Entries []QueryLogEntry `json:"entries"`
 }
 
-// QueryLogDump lista as entradas (mais antigas primeiro). limit<=0 = todas.
+// QueryLogDump lists the entries (oldest first). limit<=0 = all.
 func QueryLogDump(db *sql.DB, limit int) (QueryLogDumpResult, error) {
 	q := "SELECT id, query, source_query, normalized, results_count, created_at FROM query_log ORDER BY id ASC"
 	var args []any
@@ -167,7 +167,7 @@ type QueryLogPruneResult struct {
 	ThroughID int64 `json:"through_id"`
 }
 
-// QueryLogPrune apaga entradas com id <= throughID (seguro contra corrida).
+// QueryLogPrune deletes entries with id <= throughID (race-safe).
 func QueryLogPrune(db *sql.DB, throughID int64) (QueryLogPruneResult, error) {
 	var before, after int
 	if err := db.QueryRow("SELECT COUNT(*) FROM query_log").Scan(&before); err != nil {
@@ -189,8 +189,8 @@ type LinkifyResult struct {
 	Scanned int `json:"scanned"`
 }
 
-// Linkify converte [[wikilinks]] resolvíveis por slug exato em links markdown.
-// Idempotente; preserva frontmatter verbatim.
+// Linkify converts [[wikilinks]] resolvable by exact slug into markdown links.
+// Idempotent; preserves frontmatter verbatim.
 func Linkify(wikiDir string) (LinkifyResult, error) {
 	var files []string
 	err := filepath.WalkDir(wikiDir, func(p string, d fs.DirEntry, err error) error {

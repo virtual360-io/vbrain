@@ -8,10 +8,10 @@ import (
 	"strings"
 )
 
-// systemBackend implementa as operações de escrita via o git do sistema,
-// aproveitando as credenciais já configuradas do usuário no push. vbrain não
-// impõe assinatura nos próprios commits (commit.gpgsign=false) para funcionar em
-// qualquer máquina sem signing configurado.
+// systemBackend implements the write operations via the system git, leveraging
+// the user's already-configured credentials on push. vbrain does not impose
+// signing on its own commits (commit.gpgsign=false) so it works on any machine
+// without signing configured.
 type systemBackend struct{}
 
 func (systemBackend) Init(dir string) error {
@@ -66,9 +66,10 @@ func (systemBackend) AddRemote(url, dir, name string) error {
 	return err
 }
 
-// commitArgs monta o `git [-c …] commit -m msg`: nunca impõe assinatura
-// (commit.gpgsign=false) e, se o usuário não tem identidade configurada, usa um
-// autor vbrain de fallback (espelha o backend go-git) — sem sobrescrever a real.
+// commitArgs builds `git [-c …] commit -m msg`: it never imposes signing
+// (commit.gpgsign=false) and, if the user has no identity configured, uses a
+// vbrain fallback author (mirrors the go-git backend) — without overwriting the
+// real one.
 func commitArgs(dir, message string) []string {
 	args := []string{"git", "-c", "commit.gpgsign=false"}
 	if !configSet(dir, "user.name") || !configSet(dir, "user.email") {
@@ -82,7 +83,7 @@ func configSet(dir, key string) bool {
 	return ok && strings.TrimSpace(out) != ""
 }
 
-// changesStaged: git diff --cached --quiet sai != 0 quando há algo staged.
+// changesStaged: git diff --cached --quiet exits != 0 when something is staged.
 func changesStaged(dir string) bool {
 	_, ok := sysStatus(dir, "git", "diff", "--cached", "--quiet")
 	return !ok
@@ -106,6 +107,6 @@ func sysStatus(dir string, args ...string) (string, bool) {
 	cmd.Dir = dir
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	ok := cmd.Run() == nil // rodar antes de ler o buffer
+	ok := cmd.Run() == nil // run before reading the buffer
 	return out.String(), ok
 }

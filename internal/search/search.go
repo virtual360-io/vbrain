@@ -1,5 +1,5 @@
-// Package search consulta o índice FTS5 e expande por vizinhos do grafo. Porta
-// determinística de scripts/query.rb.
+// Package search queries the FTS5 index and expands by graph neighbors.
+// Deterministic port of scripts/query.rb.
 package search
 
 import (
@@ -9,7 +9,8 @@ import (
 	"github.com/virtual360-io/vbrain/internal/ftsquery"
 )
 
-// Opts controla limite, prefix matching, a pergunta NL original e o logging.
+// Opts controls the limit, prefix matching, the original NL question, and
+// logging.
 type Opts struct {
 	Limit       int
 	Prefix      bool
@@ -17,7 +18,7 @@ type Opts struct {
 	Log         bool
 }
 
-// Hit é um resultado FTS5 (com snippet destacado).
+// Hit is an FTS5 result (with a highlighted snippet).
 type Hit struct {
 	Path    string `json:"path"`
 	Title   string `json:"title"`
@@ -25,14 +26,14 @@ type Hit struct {
 	Snippet string `json:"snippet"`
 }
 
-// Related é um vizinho do grafo (out/backlink a 1 hop), sem snippet.
+// Related is a graph neighbor (out/backlink at 1 hop), without a snippet.
 type Related struct {
 	Path  string `json:"path"`
 	Title string `json:"title"`
 	Kind  string `json:"kind"`
 }
 
-// Result é a resposta completa de uma consulta.
+// Result is the full response of a query.
 type Result struct {
 	Query      string    `json:"query"`
 	Normalized string    `json:"normalized"`
@@ -49,8 +50,8 @@ SELECT p.id, p.path, p.title, p.kind,
  ORDER BY rank
  LIMIT ?`
 
-// Query normaliza, busca no FTS5, anexa vizinhos do grafo e (opcional) registra
-// no query_log. Normalização vazia → resultado vazio (mas logado).
+// Query normalizes, searches FTS5, appends graph neighbors, and (optionally)
+// records into query_log. Empty normalization → empty result (but logged).
 func Query(db *sql.DB, query string, opts Opts) (Result, error) {
 	if opts.Limit <= 0 {
 		opts.Limit = 10
@@ -96,8 +97,9 @@ func Query(db *sql.DB, query string, opts Opts) (Result, error) {
 	return res, nil
 }
 
-// neighbors devolve outlinks + backlinks (1 hop) das páginas hit, deduplicados
-// e excluindo os próprios hits. Sem reweighting — o vbrain é raso aqui (Regra 5).
+// neighbors returns the outlinks + backlinks (1 hop) of the hit pages,
+// deduplicated and excluding the hits themselves. No reweighting — vbrain stays
+// shallow here (Rule 5).
 func neighbors(db *sql.DB, hitIDs []int64, limit int) ([]Related, error) {
 	ph := strings.TrimSuffix(strings.Repeat("?,", len(hitIDs)), ",")
 	q := `

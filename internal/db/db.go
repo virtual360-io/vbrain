@@ -1,5 +1,5 @@
-// Package db abre e migra o índice SQLite (FTS5) do vbrain. Porta
-// determinística de lib/vbrain/db.rb usando o driver puro-Go modernc.org/sqlite.
+// Package db opens and migrates vbrain's SQLite (FTS5) index. Deterministic
+// port of lib/vbrain/db.rb using the pure-Go driver modernc.org/sqlite.
 package db
 
 import (
@@ -12,8 +12,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// SchemaSQL é o schema idempotente do índice: raw_sources, pages, links,
-// query_log, a tabela FTS5 externa e os triggers de sincronização.
+// SchemaSQL is the idempotent index schema: raw_sources, pages, links,
+// query_log, the external-content FTS5 table, and the sync triggers.
 const SchemaSQL = `
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
@@ -78,9 +78,9 @@ CREATE TRIGGER IF NOT EXISTS pages_au AFTER UPDATE ON pages BEGIN
 END;
 `
 
-// Open abre o banco em path (ou Paths.DBPath() se vazio), garante o diretório,
-// força foreign_keys e roda a migração. Usa uma única conexão: o índice é
-// single-user e bancos :memory: exigem conexão única.
+// Open opens the database at path (or Paths.DBPath() if empty), ensures the
+// directory, forces foreign_keys, and runs the migration. Uses a single
+// connection: the index is single-user and :memory: databases require one.
 func Open(path string) (*sql.DB, error) {
 	if path == "" {
 		path = paths.DBPath()
@@ -108,8 +108,8 @@ func Open(path string) (*sql.DB, error) {
 	return sqlDB, nil
 }
 
-// Migrate aplica o schema (idempotente) e reconstrói pages se o CHECK antigo
-// (sem 'realtime') estiver presente.
+// Migrate applies the schema (idempotent) and rebuilds pages if the old CHECK
+// (without 'realtime') is present.
 func Migrate(db *sql.DB) error {
 	if _, err := db.Exec(SchemaSQL); err != nil {
 		return err
@@ -117,13 +117,14 @@ func Migrate(db *sql.DB) error {
 	return rebuildPagesIfOldKindCheck(db)
 }
 
-// rebuildPagesIfOldKindCheck derruba pages/fts/triggers e recria o schema se a
-// tabela pages ainda tiver o CHECK de kind sem 'realtime' (migração legada).
+// rebuildPagesIfOldKindCheck drops pages/fts/triggers and recreates the schema
+// if the pages table still has the kind CHECK without 'realtime' (legacy
+// migration).
 func rebuildPagesIfOldKindCheck(db *sql.DB) error {
 	var ddl sql.NullString
 	err := db.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name='pages'").Scan(&ddl)
 	if err != nil || !ddl.Valid {
-		return nil // sem tabela ainda ou erro benigno: nada a reconstruir
+		return nil // no table yet or benign error: nothing to rebuild
 	}
 	sqlText := ddl.String
 	if strings.Contains(sqlText, "'realtime'") || !strings.Contains(sqlText, "CHECK(kind IN") {

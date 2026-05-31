@@ -1,5 +1,5 @@
-// Package paths resolve os diretórios de dados do vbrain a partir de
-// VBRAIN_HOME (ou ~/vbrain). Porta determinística de lib/vbrain/paths.rb.
+// Package paths resolves vbrain's data directories from VBRAIN_HOME (or
+// ~/vbrain). Deterministic port of lib/vbrain/paths.rb.
 package paths
 
 import (
@@ -8,18 +8,18 @@ import (
 	"strings"
 )
 
-// RealtimeDir é o único subdir especial da wiki: páginas fantasma com handler
-// MCP, escritas por outra skill, não pelo pipeline de ingest.
+// RealtimeDir is the wiki's only special subdir: phantom pages with an MCP
+// handler, written by another skill, not by the ingest pipeline.
 const RealtimeDir = "_realtime"
 
-// Kinds são os valores válidos de `kind` no frontmatter. Metadado livre — não
-// determina mais a pasta (layout plano, estilo ai-memory).
+// Kinds are the valid `kind` values in the frontmatter. Free metadata — it no
+// longer determines the folder (flat layout, ai-memory style).
 var Kinds = []string{"concept", "decision", "gotcha", "note", "rule", "realtime"}
 
-// DataHome devolve a raiz dos dados: VBRAIN_HOME se setado e não-vazio; senão,
-// se o diretório atual é uma base (carrega wiki/), usa-o — cobre o cloud onde o
-// checkout é a própria base e o sub-agente não herda o env do shell; só então
-// cai no ~/vbrain.
+// DataHome returns the data root: VBRAIN_HOME if set and non-empty; otherwise,
+// if the current directory is a base (it carries wiki/), use it — this covers
+// the cloud where the checkout is the base itself and the sub-agent doesn't
+// inherit the shell env; only then fall back to ~/vbrain.
 func DataHome() string {
 	if env := os.Getenv("VBRAIN_HOME"); env != "" {
 		return expand(env)
@@ -30,7 +30,8 @@ func DataHome() string {
 	return expand(filepath.Join("~", "vbrain"))
 }
 
-// IsBase indica se dir é uma base vbrain (carrega a wiki/, fonte da verdade).
+// IsBase reports whether dir is a vbrain base (it carries wiki/, the source of
+// truth).
 func IsBase(dir string) bool {
 	fi, err := os.Stat(filepath.Join(dir, "wiki"))
 	return err == nil && fi.IsDir()
@@ -42,7 +43,7 @@ func DBDir() string   { return filepath.Join(DataHome(), "db") }
 func DBPath() string  { return filepath.Join(DBDir(), "vbrain.sqlite3") }
 func TmpDir() string  { return filepath.Join(RawDir(), ".tmp") }
 
-// EnsureDirs cria a estrutura plana de diretórios mais wiki/_realtime.
+// EnsureDirs creates the flat directory structure plus wiki/_realtime.
 func EnsureDirs() error {
 	dirs := []string{RawDir(), WikiDir(), DBDir(), TmpDir(), filepath.Join(WikiDir(), RealtimeDir)}
 	for _, d := range dirs {
@@ -53,8 +54,8 @@ func EnsureDirs() error {
 	return nil
 }
 
-// expand resolve `~` para o home do usuário e torna o caminho absoluto,
-// espelhando File.expand_path do Ruby.
+// expand resolves `~` to the user's home and makes the path absolute, mirroring
+// Ruby's File.expand_path.
 func expand(p string) string {
 	if p == "~" || strings.HasPrefix(p, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {

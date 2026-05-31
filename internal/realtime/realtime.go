@@ -1,7 +1,7 @@
-// Package realtime gera as "páginas fantasma" realtime (kind=realtime) e seus
-// configs. Quando o /vbrain-query-knowledge recebe uma dessas no FTS5, o agente
-// NÃO devolve o body — chama o handler MCP correspondente. Porta determinística
-// de lib/vbrain/realtime/*.rb. O dispatch MCP em si é da skill.
+// Package realtime generates the realtime "phantom pages" (kind=realtime) and
+// their configs. When /vbrain-query-knowledge hits one in FTS5, the agent does
+// NOT return the body — it calls the corresponding MCP handler. Deterministic
+// port of lib/vbrain/realtime/*.rb. The MCP dispatch itself is the skill's job.
 package realtime
 
 import (
@@ -13,7 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Item é uma entrada de fonte (calendário/label/canal) com campos string.
+// Item is a source entry (calendar/label/channel) with string fields.
 type Item map[string]string
 
 func configPath(name string) string {
@@ -22,7 +22,7 @@ func configPath(name string) string {
 
 func realtimeDir() string { return filepath.Join(paths.WikiDir(), paths.RealtimeDir) }
 
-// saveConfig grava {key: items} em config/realtime/<name>.yml.
+// saveConfig writes {key: items} to config/realtime/<name>.yml.
 func saveConfig(name, key string, items []Item) error {
 	path := configPath(name)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -35,7 +35,8 @@ func saveConfig(name, key string, items []Item) error {
 	return os.WriteFile(path, out, 0o644)
 }
 
-// loadConfig lê os items de config/realtime/<name>.yml; ok=false se não existe.
+// loadConfig reads the items from config/realtime/<name>.yml; ok=false if it
+// doesn't exist.
 func loadConfig(name, key string) ([]Item, bool) {
 	data, err := os.ReadFile(configPath(name))
 	if err != nil {
@@ -66,7 +67,7 @@ func writePage(slug string, fm map[string]any, body string) (string, error) {
 	return page.Write(dir, slug, fm, body)
 }
 
-// itemsAny converte []Item em []any para o frontmatter.
+// itemsAny converts []Item into []any for the frontmatter.
 func itemsAny(items []Item) []any {
 	out := make([]any, len(items))
 	for i, it := range items {

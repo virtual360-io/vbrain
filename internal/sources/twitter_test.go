@@ -99,18 +99,18 @@ func TestTwitterComputeTokenDeterministicNonEmpty(t *testing.T) {
 func TestTwitterExtractFromJSONRendersMetadataAndText(t *testing.T) {
 	md := extractFrom(t, fixtureJSON(t), tweetURL, tweetID, "")
 	for _, want := range []string{
-		"# Tweet de Alok Bishoyi",
+		"# Tweet by Alok Bishoyi",
 		"- Tweet ID: " + tweetID,
-		"- Autor: Alok Bishoyi (@alokbishoyi97)",
-		"- Data: 2026-05-27",
-		"- Idioma: zxx",
-		"## Texto do tweet",
+		"- Author: Alok Bishoyi (@alokbishoyi97)",
+		"- Date: 2026-05-27",
+		"- Language: zxx",
+		"## Tweet text",
 		"http://x.com/i/article/2059581224960835584",
-		"## Links citados",
+		"## Cited links",
 		"[x.com/i/article/2059…](http://x.com/i/article/2059581224960835584)",
 	} {
 		if !strings.Contains(md, want) {
-			t.Errorf("md não contém %q", want)
+			t.Errorf("md missing %q", want)
 		}
 	}
 }
@@ -118,13 +118,13 @@ func TestTwitterExtractFromJSONRendersMetadataAndText(t *testing.T) {
 func TestTwitterExtractFromJSONRendersEmbeddedArticlePreview(t *testing.T) {
 	md := extractFrom(t, fixtureJSON(t), tweetURL, tweetID, "")
 	for _, want := range []string{
-		"## Artigo embutido",
+		"## Embedded article",
 		"Using Autoresearch to improve harness skills",
 		"self-improving agents are here",
-		"body completo do artigo só é acessível",
+		"the article's full body is only accessible",
 	} {
 		if !strings.Contains(md, want) {
-			t.Errorf("md não contém %q", want)
+			t.Errorf("md missing %q", want)
 		}
 	}
 }
@@ -133,14 +133,14 @@ func TestTwitterExtractFromJSONIncludesFullArticleWhenProvided(t *testing.T) {
 	full := "Using Autoresearch to improve harness skills\n\nself-improving agents are here\nThe most interesting shift in AI right now... (and a lot more content that exceeds the preview length significantly to trigger the threshold). " +
 		strings.Repeat("Lorem ipsum dolor sit amet, consectetur adipiscing elit. ", 8)
 	md := extractFrom(t, fixtureJSON(t), tweetURL, tweetID, full)
-	if !strings.Contains(md, "Body completo") || !strings.Contains(md, "Playwright") {
-		t.Error("deveria embutir o body completo via Playwright")
+	if !strings.Contains(md, "Full body") || !strings.Contains(md, "headless Chrome") {
+		t.Error("should embed the full body via headless Chrome")
 	}
-	if strings.Contains(md, "body completo do artigo só é acessível") {
-		t.Error("não deveria mostrar a nota de preview quando há body completo")
+	if strings.Contains(md, "the article's full body is only accessible") {
+		t.Error("should not show the preview note when there's a full body")
 	}
 	if !strings.Contains(md, "and a lot more content") {
-		t.Error("deveria conter o texto do artigo")
+		t.Error("should contain the article text")
 	}
 }
 
@@ -158,8 +158,8 @@ func TestTwitterCleanArticleTextStripsXBoilerplate(t *testing.T) {
 func TestTwitterExtractFromJSONSkipsArticleSectionWhenAbsent(t *testing.T) {
 	fake := `{"user":{"name":"X","screen_name":"x"},"created_at":"2026-01-01T00:00:00Z","text":"hello"}`
 	md := extractFrom(t, fake, "https://x.com/x/status/1", "1", "")
-	if strings.Contains(md, "Artigo embutido") {
-		t.Error("não deveria ter seção de artigo")
+	if strings.Contains(md, "Embedded article") {
+		t.Error("should not have an article section")
 	}
 }
 
@@ -174,8 +174,8 @@ func TestTwitterExtractFromJSONSignalsEmptyTextWhenOnlyLink(t *testing.T) {
 func TestTwitterExtractFromJSONRendersMediaWhenPresent(t *testing.T) {
 	fake := `{"user":{"name":"X","screen_name":"x"},"created_at":"2026-01-01T00:00:00Z","text":"foo","mediaDetails":[{"type":"photo","media_url_https":"https://pbs.test/img.jpg"}]}`
 	md := extractFrom(t, fake, "https://x.com/x/status/1", "1", "")
-	if !strings.Contains(md, "## Mídia") || !strings.Contains(md, "photo: https://pbs.test/img.jpg") {
-		t.Errorf("mídia não renderizada: %q", md)
+	if !strings.Contains(md, "## Media") || !strings.Contains(md, "photo: https://pbs.test/img.jpg") {
+		t.Errorf("media not rendered: %q", md)
 	}
 }
 

@@ -1,5 +1,5 @@
-// Package slug gera slugs ASCII estáveis a partir de títulos. Porta
-// determinística de lib/vbrain/slug.rb.
+// Package slug generates stable ASCII slugs from titles. Deterministic port of
+// lib/vbrain/slug.rb.
 package slug
 
 import (
@@ -11,11 +11,10 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// MaxLength é o comprimento máximo padrão do slug.
+// MaxLength is the default maximum slug length.
 const MaxLength = 80
 
-// ErrEmpty é retornado quando o título é vazio ou não produz nenhum caractere
-// aproveitável.
+// ErrEmpty is returned when the title is empty or yields no usable character.
 var ErrEmpty = errors.New("slug: title cannot be nil or empty / yielded empty slug")
 
 var (
@@ -23,16 +22,16 @@ var (
 	trailingSep = regexp.MustCompile(`-+$`)
 )
 
-// From converte um título em slug usando o MaxLength padrão.
+// From converts a title into a slug using the default MaxLength.
 func From(title string) (string, error) {
 	return FromMax(title, MaxLength)
 }
 
-// FromMax converte um título em slug com comprimento máximo customizado.
+// FromMax converts a title into a slug with a custom maximum length.
 //
-// Pipeline (igual ao Ruby): NFKD → drop de não-ASCII (combining marks e bases
-// acentuadas somem) → lowercase → colapso de pontuação em "-" → trim das
-// pontas → truncamento sem traço final.
+// Pipeline (same as Ruby): NFKD → drop non-ASCII (combining marks and accented
+// bases disappear) → lowercase → collapse punctuation into "-" → trim the ends →
+// truncate without a trailing dash.
 func FromMax(title string, maxLength int) (string, error) {
 	if strings.TrimSpace(title) == "" {
 		return "", ErrEmpty
@@ -41,7 +40,7 @@ func FromMax(title string, maxLength int) (string, error) {
 	var b strings.Builder
 	for _, r := range norm.NFKD.String(title) {
 		if r > unicode.MaxASCII || unicode.Is(unicode.Mn, r) {
-			continue // descarta não-ASCII e marcas combinantes
+			continue // drop non-ASCII and combining marks
 		}
 		b.WriteRune(r)
 	}

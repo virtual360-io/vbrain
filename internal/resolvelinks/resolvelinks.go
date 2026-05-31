@@ -1,6 +1,7 @@
-// Package resolvelinks aplica um mapa {título => slug} produzido pela LLM aos
-// [[wikilinks]] não-resolvidos. Porta determinística de scripts/resolve_links.rb:
-// a DECISÃO é da LLM; aqui só aplicamos (Regra 5), descartando slugs inexistentes.
+// Package resolvelinks applies a {title => slug} map produced by the LLM to the
+// unresolved [[wikilinks]]. Deterministic port of scripts/resolve_links.rb: the
+// DECISION is the LLM's; here we only apply it (Rule 5), discarding nonexistent
+// slugs.
 package resolvelinks
 
 import (
@@ -12,16 +13,16 @@ import (
 	"github.com/virtual360-io/vbrain/internal/page"
 )
 
-// Result é o JSON de saída.
+// Result is the output JSON.
 type Result struct {
 	Changed            int `json:"changed"`
 	Applied            int `json:"applied"`
 	DroppedUnknownSlug int `json:"dropped_unknown_slug"`
 }
 
-// ResolveLinks filtra o mapa para slugs que existem de fato e reescreve os
-// corpos. Retorna quantos arquivos mudaram, quantas entradas foram aplicadas e
-// quantas descartadas (slug nulo/vazio/inexistente).
+// ResolveLinks filters the map to slugs that actually exist and rewrites the
+// bodies. Returns how many files changed, how many entries were applied, and how
+// many were discarded (null/empty/nonexistent slug).
 func ResolveLinks(wikiDir string, mapping map[string]string) (Result, error) {
 	mdFiles, err := walkMarkdown(wikiDir)
 	if err != nil {

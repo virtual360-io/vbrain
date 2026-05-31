@@ -2,8 +2,8 @@ package realtime
 
 import "strings"
 
-// Slack é a fonte realtime do Slack. Diferente de gmail/gcalendar: lista de
-// canais vazia é válida e significa busca global no workspace inteiro.
+// Slack is the Slack realtime source. Unlike gmail/gcalendar: an empty channel
+// list is valid and means a global search across the whole workspace.
 type Slack struct{}
 
 const slackTitle = "Slack (realtime)"
@@ -32,7 +32,7 @@ func normalizeChannel(c map[string]string) Item {
 	return Item{"id": id, "name": c["name"]}
 }
 
-// SaveConfig normaliza e grava; lista vazia é permitida (busca global).
+// SaveConfig normalizes and writes; an empty list is allowed (global search).
 func (Slack) SaveConfig(channels []map[string]string) ([]Item, error) {
 	norm := []Item{}
 	for _, c := range channels {
@@ -49,7 +49,7 @@ func (Slack) SaveConfig(channels []map[string]string) ([]Item, error) {
 
 func (Slack) LoadConfig() ([]Item, bool) { return loadConfig("slack", "channels") }
 
-// Global indica busca no workspace inteiro (nenhum canal conectado).
+// Global indicates a search across the whole workspace (no channel connected).
 func (Slack) Global(channels []Item) bool {
 	for _, c := range channels {
 		if c["id"] != "" || c["name"] != "" {
@@ -69,24 +69,24 @@ func (Slack) Frontmatter(channels []Item) map[string]any {
 func (s Slack) Body(channels []Item) string {
 	var scope string
 	if s.Global(channels) {
-		scope = "Nenhum canal específico conectado: a busca é **global** no workspace\n" +
-			"inteiro (todos os canais/DMs acessíveis), sem filtro `in:`.\n"
+		scope = "No specific channel connected: the search is **global** across the\n" +
+			"whole workspace (all accessible channels/DMs), with no `in:` filter.\n"
 	} else {
 		var b strings.Builder
 		for _, c := range channels {
 			b.WriteString("- " + formatChannel(c) + "\n")
 		}
-		scope = "Canais conectados — a busca filtra por eles (uma chamada por canal,\n" +
-			"já que o Slack search não tem operador `OR`):\n\n" +
+		scope = "Connected channels — the search filters by them (one call per channel,\n" +
+			"since Slack search has no `OR` operator):\n\n" +
 			strings.TrimRight(b.String(), "\n") + "\n"
 	}
 	return "# " + slackTitle + "\n\n" +
-		"Esta página é uma **fonte realtime**: quando o `/vbrain-query-knowledge`\n" +
-		"a recebe como resultado FTS5, o agente NÃO devolve este body — em vez\n" +
-		"disso chama `mcp__claude_ai_Slack__slack_search_public_and_private`\n" +
-		"com a query do usuário convertida pra Slack search syntax.\n\n" +
-		"## Escopo\n\n" + scope + "\n" +
-		"## Keywords (pra casar no FTS5)\n\n" +
+		"This page is a **realtime source**: when `/vbrain-query-knowledge`\n" +
+		"receives it as an FTS5 result, the agent does NOT return this body —\n" +
+		"instead it calls `mcp__claude_ai_Slack__slack_search_public_and_private`\n" +
+		"with the user's query converted to Slack search syntax.\n\n" +
+		"## Scope\n\n" + scope + "\n" +
+		"## Keywords (to match in FTS5)\n\n" +
 		strings.Join(slackKeywords, ", ") + ".\n"
 }
 
@@ -106,8 +106,8 @@ func formatChannel(c Item) string {
 	return "#" + name + " (`" + id + "`)"
 }
 
-// ChannelFilter devolve o modificador Slack `in:<#ID>` (ou `in:#name`), "" se
-// vazio.
+// ChannelFilter returns the Slack `in:<#ID>` modifier (or `in:#name`), "" if
+// empty.
 func (Slack) ChannelFilter(c Item) string {
 	n := normalizeChannel(c)
 	if n["id"] != "" {

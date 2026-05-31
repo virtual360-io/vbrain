@@ -1,7 +1,7 @@
-// Package routines gerencia as rotinas agendadas do vbrain (config/routines/
-// routines.yml). Porta determinística de lib/vbrain/routines.rb. next_run é
-// computado por cron (robfig/cron, equivalente ao fugit do Ruby para crons
-// padrão de 5 campos). claim_due! avança ANTES de executar (at-most-once).
+// Package routines manages vbrain's scheduled routines (config/routines/
+// routines.yml). Deterministic port of lib/vbrain/routines.rb. next_run is
+// computed by cron (robfig/cron, equivalent to Ruby's fugit for standard
+// 5-field crons). ClaimDue advances BEFORE executing (at-most-once).
 package routines
 
 import (
@@ -18,12 +18,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Err é o erro de validação/parse das rotinas.
+// Err is the routines validation/parse error.
 var Err = errors.New("routines")
 
 var cronRE = regexp.MustCompile(`^\S+\s+\S+\s+\S+\s+\S+\s+\S+$`)
 
-// Routine é uma rotina agendada. Campos nuláveis usam ponteiro (blank → nil).
+// Routine is a scheduled routine. Nullable fields use a pointer (blank → nil).
 type Routine struct {
 	Slug        string  `yaml:"slug" json:"slug"`
 	Description string  `yaml:"description" json:"description"`
@@ -34,18 +34,18 @@ type Routine struct {
 	Enabled     bool    `yaml:"enabled" json:"enabled"`
 }
 
-// ClaimedRoutine é uma rotina vencida (com o last_run ANTERIOR exposto).
+// ClaimedRoutine is a due routine (with the PREVIOUS last_run exposed).
 type ClaimedRoutine struct {
 	Routine
 	ClaimedAt string `json:"claimed_at"`
 }
 
-// ConfigPath devolve o caminho do routines.yml na base.
+// ConfigPath returns the path of routines.yml in the base.
 func ConfigPath() string {
 	return filepath.Join(paths.DataHome(), "config", "routines", "routines.yml")
 }
 
-// LoadAll lê e normaliza todas as rotinas; [] se o arquivo não existe.
+// LoadAll reads and normalizes all routines; [] if the file doesn't exist.
 func LoadAll() ([]Routine, error) {
 	data, err := os.ReadFile(ConfigPath())
 	if err != nil {
@@ -67,7 +67,7 @@ func LoadAll() ([]Routine, error) {
 	return out, nil
 }
 
-// Enabled devolve as rotinas habilitadas.
+// Enabled returns the enabled routines.
 func Enabled() ([]Routine, error) {
 	all, err := LoadAll()
 	if err != nil {
@@ -82,7 +82,7 @@ func Enabled() ([]Routine, error) {
 	return out, nil
 }
 
-// Find busca uma rotina pelo slug.
+// Find looks up a routine by slug.
 func Find(slugStr string) (*Routine, error) {
 	all, err := LoadAll()
 	if err != nil {
@@ -96,8 +96,8 @@ func Find(slugStr string) (*Routine, error) {
 	return nil, nil
 }
 
-// Add cria (ou substitui, com replace) uma rotina e persiste, devolvendo a
-// entrada. next_run é computado deterministicamente do schedule.
+// Add creates (or replaces, with replace) a routine and persists it, returning
+// the entry. next_run is computed deterministically from the schedule.
 func Add(slugStr, description, prompt string, schedule *string, enabled, replace bool, now time.Time) (Routine, error) {
 	if strings.TrimSpace(slugStr) == "" {
 		return Routine{}, errWrap("slug cannot be empty")
@@ -144,7 +144,7 @@ func Add(slugStr, description, prompt string, schedule *string, enabled, replace
 		NextRun: nextRun, LastRun: nil, Prompt: prompt, Enabled: enabled,
 	}
 	if idx >= 0 {
-		entry.LastRun = existing[idx].LastRun // preserva last_run ao substituir
+		entry.LastRun = existing[idx].LastRun // preserve last_run when replacing
 		existing[idx] = entry
 	} else {
 		existing = append(existing, entry)
@@ -155,7 +155,7 @@ func Add(slugStr, description, prompt string, schedule *string, enabled, replace
 	return entry, nil
 }
 
-// Remove apaga uma rotina; false se não existia.
+// Remove deletes a routine; false if it didn't exist.
 func Remove(slugStr string) (bool, error) {
 	existing, err := LoadAll()
 	if err != nil {
@@ -170,9 +170,9 @@ func Remove(slugStr string) (bool, error) {
 	return false, nil
 }
 
-// ClaimDue reivindica as rotinas vencidas (next_run <= now): avança o next_run
-// para o próximo tick após now, seta last_run = now e persiste. Retorna as
-// vencidas com o last_run ANTERIOR (at-most-once: avança antes de executar).
+// ClaimDue claims the due routines (next_run <= now): advances next_run to the
+// next tick after now, sets last_run = now, and persists. Returns the due ones
+// with the PREVIOUS last_run (at-most-once: advances before executing).
 func ClaimDue(now time.Time) ([]ClaimedRoutine, error) {
 	existing, err := LoadAll()
 	if err != nil {
@@ -215,8 +215,8 @@ func ClaimDue(now time.Time) ([]ClaimedRoutine, error) {
 	return due, nil
 }
 
-// DueDryRun devolve as rotinas que estariam vencidas em now, SEM mutar nada
-// (para o --dry-run do run_due_routines).
+// DueDryRun returns the routines that would be due at now, WITHOUT mutating
+// anything (for the --dry-run of run_due_routines).
 func DueDryRun(now time.Time) ([]Routine, error) {
 	en, err := Enabled()
 	if err != nil {
@@ -234,7 +234,7 @@ func DueDryRun(now time.Time) ([]Routine, error) {
 	return due, nil
 }
 
-// ComputeNextRun devolve o próximo tick do cron estritamente após base (UTC).
+// ComputeNextRun returns the next cron tick strictly after base (UTC).
 func ComputeNextRun(schedule string, base time.Time) (time.Time, error) {
 	sched, err := cron.ParseStandard(schedule)
 	if err != nil {

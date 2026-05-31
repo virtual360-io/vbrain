@@ -10,7 +10,7 @@ import (
 	"unicode/utf8"
 )
 
-// Text é a fonte para arquivos locais de texto (markdown ou texto puro).
+// Text is the source for local text files (markdown or plain text).
 type Text struct{}
 
 var textExtensions = map[string]bool{".md": true, ".markdown": true, ".txt": true, ".text": true}
@@ -19,8 +19,8 @@ const sampleBytes = 4096
 
 func (Text) KindKey() string { return "text" }
 
-// Detect aceita arquivos com extensão de texto conhecida ou, sem extensão
-// reconhecida, arquivos cujo início é UTF-8 válido sem NUL.
+// Detect accepts files with a known text extension or, without a recognized
+// extension, files whose start is valid UTF-8 without a NUL.
 func (Text) Detect(path string) bool {
 	fi, err := os.Stat(path)
 	if err != nil || fi.IsDir() {
@@ -32,8 +32,8 @@ func (Text) Detect(path string) bool {
 	return utf8Text(path)
 }
 
-// CopyToRaw copia o arquivo local para raw/ com prefixo de timestamp (o default
-// de fontes baseadas em arquivo).
+// CopyToRaw copies the local file into raw/ with a timestamp prefix (the default
+// for file-based sources).
 func (Text) CopyToRaw(input, rawDir, timestamp string) (RawInfo, error) {
 	basename := filepath.Base(input)
 	dest := filepath.Join(rawDir, timestamp+"-"+basename)
@@ -51,7 +51,7 @@ func (Text) CopyToRaw(input, rawDir, timestamp string) (RawInfo, error) {
 	return RawInfo{Path: dest, OriginalFilename: basename, SHA256: hex.EncodeToString(sum[:])}, nil
 }
 
-// Extract copia o conteúdo do arquivo para out_path (passthrough).
+// Extract copies the file content to out_path (passthrough).
 func (Text) Extract(input, outPath string, _ RawInfo) error {
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 		return err

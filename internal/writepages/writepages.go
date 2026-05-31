@@ -1,7 +1,7 @@
-// Package writepages publica páginas wiki a partir do output do writer (LLM),
-// encenando tudo num diretório temporário e só então commitando "de uma vez
-// só". Porta determinística de scripts/write_pages.rb. A wiki nunca fica num
-// estado meio-escrito; um guardrail pré-commit barra reorgs que orfanariam raws.
+// Package writepages publishes wiki pages from the writer's (LLM) output,
+// staging everything in a temp directory and only then committing "all at
+// once". Deterministic port of scripts/write_pages.rb. The wiki is never left
+// half-written; a pre-commit guardrail blocks reorgs that would orphan raws.
 package writepages
 
 import (
@@ -17,7 +17,7 @@ import (
 	"github.com/virtual360-io/vbrain/internal/slug"
 )
 
-// PageInput é uma entrada do pages_json produzido pelo writer.
+// PageInput is one entry of the pages_json produced by the writer.
 type PageInput struct {
 	Op           string   `json:"op"`
 	Slug         string   `json:"slug"`
@@ -28,7 +28,7 @@ type PageInput struct {
 	Tags         []string `json:"tags"`
 }
 
-// Result é o JSON de saída.
+// Result is the output JSON.
 type Result struct {
 	Committed    *bool    `json:"committed,omitempty"`
 	NeedsReview  bool     `json:"needs_review,omitempty"`
@@ -47,8 +47,8 @@ var kindSet = func() map[string]bool {
 	return m
 }()
 
-// WritePages encena e publica as páginas. Retorna needs_review (sem commitar) se
-// alguma reorg deixaria um raw órfão.
+// WritePages stages and publishes the pages. Returns needs_review (without
+// committing) if a reorg would leave a raw orphaned.
 func WritePages(db *sql.DB, rawID int, pages []PageInput, wikiDir, tmpDir, dataHome string) (Result, error) {
 	var rawPath string
 	if err := db.QueryRow("SELECT path FROM raw_sources WHERE id = ?", rawID).Scan(&rawPath); err != nil {
@@ -156,8 +156,8 @@ func WritePages(db *sql.DB, rawID int, pages []PageInput, wikiDir, tmpDir, dataH
 		}
 	}
 
-	// Copia pro .trash/ os deletes (cópia — wiki segue intacta); pula slug
-	// criado/atualizado nesta run e inexistente.
+	// Copy the deletes into .trash/ (a copy — the wiki stays intact); skip a
+	// slug created/updated in this run, and a nonexistent one.
 	for _, s := range uniq(deleteSlugs) {
 		if stagedSlugs[s] != "" {
 			continue
@@ -174,7 +174,7 @@ func WritePages(db *sql.DB, rawID int, pages []PageInput, wikiDir, tmpDir, dataH
 		}
 	}
 
-	// Guardrail pré-commit: nenhum raw citado hoje pode ficar órfão.
+	// Pre-commit guardrail: no raw cited today may end up orphaned.
 	liveFiles, _ := filepath.Glob(filepath.Join(wikiDir, "*.md"))
 	removedOrReplaced := map[string]bool{}
 	for _, s := range deleteSlugs {
@@ -212,7 +212,7 @@ func WritePages(db *sql.DB, rawID int, pages []PageInput, wikiDir, tmpDir, dataH
 		}, nil
 	}
 
-	// Commit: mv staged → wiki, rm originais com cópia no trash, apaga a temp.
+	// Commit: mv staged → wiki, rm originals that have a trash copy, delete temp.
 	var removed []string
 	for _, staged := range stagedFiles {
 		if err := os.Rename(staged, filepath.Join(wikiDir, filepath.Base(staged))); err != nil {
@@ -238,7 +238,7 @@ func WritePages(db *sql.DB, rawID int, pages []PageInput, wikiDir, tmpDir, dataH
 	}, nil
 }
 
-// collectRaws junta todos os source_raw citados num conjunto de arquivos.
+// collectRaws gathers all cited source_raw values across a set of files.
 func collectRaws(files []string) map[string]bool {
 	set := map[string]bool{}
 	for _, f := range files {

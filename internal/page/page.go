@@ -1,5 +1,5 @@
-// Package page lê e escreve páginas markdown com frontmatter YAML. Porta
-// determinística de lib/vbrain/page.rb.
+// Package page reads and writes markdown pages with YAML frontmatter.
+// Deterministic port of lib/vbrain/page.rb.
 package page
 
 import (
@@ -15,21 +15,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// frontmatterRE separa o bloco YAML do corpo. (?s) = `.` casa newline (flag /m
-// do Ruby).
+// frontmatterRE separates the YAML block from the body. (?s) = `.` matches
+// newline (Ruby's /m flag).
 var frontmatterRE = regexp.MustCompile(`(?s)\A---\s*\n(.*?)\n---\s*\n(.*)\z`)
 
-// ErrInvalid cobre dir inexistente ou slug vazio no Write.
+// ErrInvalid covers a non-existent dir or an empty slug in Write.
 var ErrInvalid = errors.New("page: dir must exist and slug cannot be empty")
 
-// Parsed é o resultado de parse: frontmatter, corpo e sha256 do corpo.
+// Parsed is the result of parsing: frontmatter, body, and the body's sha256.
 type Parsed struct {
 	Frontmatter map[string]any
 	Body        string
 	SHA256      string
 }
 
-// Parse lê e parseia uma página do disco.
+// Parse reads and parses a page from disk.
 func Parse(path string) (Parsed, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -38,8 +38,8 @@ func Parse(path string) (Parsed, error) {
 	return ParseString(string(content))
 }
 
-// ParseString parseia conteúdo em memória. Sem frontmatter, body = conteúdo
-// inteiro e frontmatter vazio.
+// ParseString parses content in memory. Without frontmatter, body = the whole
+// content and frontmatter is empty.
 func ParseString(content string) (Parsed, error) {
 	fm := map[string]any{}
 	body := content
@@ -55,7 +55,7 @@ func ParseString(content string) (Parsed, error) {
 	return Parsed{Frontmatter: fm, Body: body, SHA256: sha256hex(body)}, nil
 }
 
-// Write renderiza frontmatter+body e grava atomicamente em dir/<slug>.md.
+// Write renders frontmatter+body and writes it atomically to dir/<slug>.md.
 func Write(dir, slug string, frontmatter map[string]any, body string) (string, error) {
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		return "", ErrInvalid
@@ -75,8 +75,9 @@ func Write(dir, slug string, frontmatter map[string]any, body string) (string, e
 	return full, nil
 }
 
-// RewriteBody reescreve só o CORPO, preservando o frontmatter verbatim (sem
-// reserializar YAML — zero churn). Retorna true se gravou, false se inalterado.
+// RewriteBody rewrites only the BODY, preserving the frontmatter verbatim (no
+// YAML reserialization — zero churn). Returns true if it wrote, false if
+// unchanged.
 func RewriteBody(path string, transform func(string) string) (bool, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -104,7 +105,7 @@ func RewriteBody(path string, transform func(string) string) (bool, error) {
 	return true, nil
 }
 
-// Render serializa frontmatter (chaves string) + corpo no formato da wiki.
+// Render serializes frontmatter (string keys) + body into the wiki format.
 func Render(frontmatter map[string]any, body string) (string, error) {
 	out, err := yaml.Marshal(frontmatter)
 	if err != nil {

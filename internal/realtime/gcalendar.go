@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Gcalendar é a fonte realtime do Google Calendar.
+// Gcalendar is the Google Calendar realtime source.
 type Gcalendar struct{}
 
 const gcalTitle = "Google Calendar (realtime)"
@@ -30,7 +30,7 @@ func normalizeCalendar(c map[string]string) Item {
 	return Item{"id": c["id"], "summary": c["summary"], "timezone": c["timezone"]}
 }
 
-// SaveConfig normaliza, descarta id vazio (exige ≥1) e grava o YAML.
+// SaveConfig normalizes, drops empty ids (requires ≥1), and writes the YAML.
 func (Gcalendar) SaveConfig(calendars []map[string]string) ([]Item, error) {
 	var norm []Item
 	for _, c := range calendars {
@@ -63,13 +63,13 @@ func (Gcalendar) Body(calendars []Item) string {
 		b.WriteString("- " + formatCalendar(c) + "\n")
 	}
 	return "# " + gcalTitle + "\n\n" +
-		"Esta página é uma **fonte realtime**: quando o `/vbrain-query-knowledge`\n" +
-		"a recebe como resultado FTS5, o agente NÃO devolve este body — em vez\n" +
-		"disso chama `mcp__claude_ai_Google_Calendar__list_events` com os\n" +
-		"calendários listados abaixo e o intervalo de tempo derivado da query.\n\n" +
-		"## Calendários conectados\n\n" +
+		"This page is a **realtime source**: when `/vbrain-query-knowledge`\n" +
+		"receives it as an FTS5 result, the agent does NOT return this body —\n" +
+		"instead it calls `mcp__claude_ai_Google_Calendar__list_events` with the\n" +
+		"calendars listed below and the time range derived from the query.\n\n" +
+		"## Connected calendars\n\n" +
 		strings.TrimRight(b.String(), "\n") + "\n\n" +
-		"## Keywords (pra casar no FTS5)\n\n" +
+		"## Keywords (to match in FTS5)\n\n" +
 		strings.Join(gcalKeywords, ", ") + ".\n"
 }
 

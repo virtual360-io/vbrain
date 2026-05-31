@@ -16,7 +16,7 @@ import (
 	"github.com/virtual360-io/vbrain/internal/slug"
 )
 
-// URL é a fonte para páginas web, lidas como markdown via r.jina.ai.
+// URL is the source for web pages, read as markdown via r.jina.ai.
 type URL struct{}
 
 var urlRE = regexp.MustCompile(`(?i)^https?://`)
@@ -27,8 +27,8 @@ const (
 	urlTimeout   = 30 * time.Second
 )
 
-// FetchJina busca a URL como markdown via r.jina.ai. É uma var de pacote para
-// permitir override determinístico nos testes (Regra 9).
+// FetchJina fetches the URL as markdown via r.jina.ai. It's a package var to
+// allow deterministic override in tests (Rule 9).
 var FetchJina = func(target string) (string, error) {
 	req, err := http.NewRequest(http.MethodGet, jinaBase+"/"+target, nil)
 	if err != nil {
@@ -64,7 +64,7 @@ func (URL) KindKey() string { return "url" }
 
 func (URL) Detect(input string) bool { return urlRE.MatchString(input) }
 
-// CopyToRaw busca o markdown e grava em raw/ com nome derivado do host.
+// CopyToRaw fetches the markdown and writes it into raw/ with a host-derived name.
 func (URL) CopyToRaw(rawURL, rawDir, timestamp string) (RawInfo, error) {
 	markdown, err := FetchJina(rawURL)
 	if err != nil {
@@ -95,7 +95,7 @@ func (URL) CopyToRaw(rawURL, rawDir, timestamp string) (RawInfo, error) {
 	}, nil
 }
 
-// Extract grava o markdown (do cache em rawInfo, ou buscando) em out_path.
+// Extract writes the markdown (from the cache in rawInfo, or by fetching) to out_path.
 func (URL) Extract(rawURL, outPath string, rawInfo RawInfo) error {
 	md := rawInfo.Markdown
 	if md == "" {

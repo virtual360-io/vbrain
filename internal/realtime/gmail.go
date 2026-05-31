@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Gmail é a fonte realtime do Gmail.
+// Gmail is the Gmail realtime source.
 type Gmail struct{}
 
 const gmailTitle = "Gmail (realtime)"
@@ -33,7 +33,7 @@ func normalizeLabel(l map[string]string) Item {
 	return Item{"id": id, "name": l["name"]}
 }
 
-// SaveConfig normaliza, descarta id vazio (exige ≥1) e grava o YAML.
+// SaveConfig normalizes, drops empty ids (requires ≥1), and writes the YAML.
 func (Gmail) SaveConfig(labels []map[string]string) ([]Item, error) {
 	var norm []Item
 	for _, l := range labels {
@@ -66,13 +66,13 @@ func (Gmail) Body(labels []Item) string {
 		b.WriteString("- " + formatLabel(l) + "\n")
 	}
 	return "# " + gmailTitle + "\n\n" +
-		"Esta página é uma **fonte realtime**: quando o `/vbrain-query-knowledge`\n" +
-		"a recebe como resultado FTS5, o agente NÃO devolve este body — em vez\n" +
-		"disso chama `mcp__claude_ai_Gmail__search_threads` prependendo um\n" +
-		"filtro `(label:<id1> OR label:<id2> …)` com os labels conectados.\n\n" +
-		"## Labels conectados\n\n" +
+		"This page is a **realtime source**: when `/vbrain-query-knowledge`\n" +
+		"receives it as an FTS5 result, the agent does NOT return this body —\n" +
+		"instead it calls `mcp__claude_ai_Gmail__search_threads`, prepending a\n" +
+		"`(label:<id1> OR label:<id2> …)` filter with the connected labels.\n\n" +
+		"## Connected labels\n\n" +
 		strings.TrimRight(b.String(), "\n") + "\n\n" +
-		"## Keywords (pra casar no FTS5)\n\n" +
+		"## Keywords (to match in FTS5)\n\n" +
 		strings.Join(gmailKeywords, ", ") + ".\n"
 }
 
@@ -88,8 +88,8 @@ func formatLabel(l Item) string {
 	return name + " (`" + id + "`)"
 }
 
-// LabelFilterClause monta o filtro Gmail `(label:a OR label:b)` (ou `label:a`
-// para um só, "" para nenhum).
+// LabelFilterClause builds the Gmail `(label:a OR label:b)` filter (or `label:a`
+// for a single one, "" for none).
 func (Gmail) LabelFilterClause(labels []Item) string {
 	var ids []string
 	for _, l := range labels {

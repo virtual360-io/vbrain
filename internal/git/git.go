@@ -1,12 +1,12 @@
-// Package git embrulha as operações git do vbrain (init, commit, push) com dois
-// backends selecionados em runtime: o git do sistema quando presente (usa as
-// credenciais já configuradas do usuário no push), senão go-git puro-Go (sem
-// dependência externa; push usa um PAT coletado no install).
+// Package git wraps vbrain's git operations (init, commit, push) with two
+// backends selected at runtime: the system git when present (uses the user's
+// already-configured credentials on push), otherwise pure-Go go-git (no external
+// dependency; push uses a PAT collected at install).
 //
-// Operações de leitura (branch, remote, changes) usam um único caminho go-git —
-// elas leem um repositório git padrão independentemente de quem o criou. Porta
-// de lib/vbrain/git.rb. O índice SQLite é versionado de propósito: /db/ NÃO
-// entra no .gitignore.
+// Read operations (branch, remote, changes) use a single go-git path — they read
+// a standard git repository regardless of who created it. Port of
+// lib/vbrain/git.rb. The SQLite index is versioned on purpose: /db/ does NOT go
+// into .gitignore.
 package git
 
 import (
@@ -18,10 +18,10 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 )
 
-// Gitignore: só staging volátil e lixo de SO. /db/ fica versionado.
+// Gitignore: only volatile staging and OS junk. /db/ stays versioned.
 const Gitignore = "/raw/.tmp/\n.DS_Store\n"
 
-// CommitResult espelha o hash retornado por Git.commit! no Ruby.
+// CommitResult mirrors the hash returned by Git.commit! in Ruby.
 type CommitResult struct {
 	Committed bool   `json:"committed"`
 	Reason    string `json:"reason,omitempty"`
@@ -29,7 +29,7 @@ type CommitResult struct {
 	Message   string `json:"message,omitempty"`
 }
 
-// PushResult espelha o hash retornado por Git.push!.
+// PushResult mirrors the hash returned by Git.push!.
 type PushResult struct {
 	Pushed bool   `json:"pushed"`
 	Reason string `json:"reason,omitempty"`
@@ -37,7 +37,7 @@ type PushResult struct {
 	Branch string `json:"branch,omitempty"`
 }
 
-// backend abstrai as operações que mutam o repo e dependem de credenciais.
+// backend abstracts the operations that mutate the repo and depend on credentials.
 type backend interface {
 	Init(dir string) error
 	Commit(message, dir string) (CommitResult, error)
@@ -45,8 +45,8 @@ type backend interface {
 	AddRemote(url, dir, name string) error
 }
 
-// systemGitAvailable detecta o git no PATH; é uma var para os testes poderem
-// forçar o backend go-git.
+// systemGitAvailable detects git on the PATH; it's a var so tests can force the
+// go-git backend.
 var systemGitAvailable = func() bool {
 	_, err := exec.LookPath("git")
 	return err == nil
@@ -59,8 +59,8 @@ func selected() backend {
 	return gogitBackend{}
 }
 
-// BackendName devolve "system" ou "gogit" — útil pro install reportar e decidir
-// se precisa coletar PAT.
+// BackendName returns "system" or "gogit" — useful for install to report and
+// decide whether it needs to collect a PAT.
 func BackendName() string {
 	if systemGitAvailable() {
 		return "system"
@@ -68,27 +68,29 @@ func BackendName() string {
 	return "gogit"
 }
 
-// Init cria o repo (branch main), escreve o .gitignore e faz o commit inicial.
+// Init creates the repo (branch main), writes the .gitignore, and makes the
+// initial commit.
 func Init(dir string) error { return selected().Init(dir) }
 
-// Commit faz o stage de tudo e commita; no-op se nada mudou.
+// Commit stages everything and commits; no-op if nothing changed.
 func Commit(message, dir string) (CommitResult, error) { return selected().Commit(message, dir) }
 
-// Push faz push da branch; no-op se não houver remote.
+// Push pushes the branch; no-op if there's no remote.
 func Push(dir, name, branch string) (PushResult, error) { return selected().Push(dir, name, branch) }
 
-// AddRemote adiciona um remote nomeado.
+// AddRemote adds a named remote.
 func AddRemote(url, dir, name string) error { return selected().AddRemote(url, dir, name) }
 
-// --- operações de leitura (backend-agnósticas, via go-git) ---
+// --- read operations (backend-agnostic, via go-git) ---
 
-// RepoInitialized indica se dir já tem um repositório git.
+// RepoInitialized reports whether dir already has a git repository.
 func RepoInitialized(dir string) bool {
 	fi, err := os.Stat(filepath.Join(dir, ".git"))
 	return err == nil && fi.IsDir()
 }
 
-// WriteGitignore escreve o .gitignore se ainda não contiver a marca; idempotente.
+// WriteGitignore writes the .gitignore if it doesn't already contain the marker;
+// idempotent.
 func WriteGitignore(dir string) (string, error) {
 	path := filepath.Join(dir, ".gitignore")
 	if b, err := os.ReadFile(path); err == nil && strings.Contains(string(b), "/raw/.tmp/") {
@@ -97,7 +99,7 @@ func WriteGitignore(dir string) (string, error) {
 	return path, os.WriteFile(path, []byte(Gitignore), 0o644)
 }
 
-// CurrentBranch devolve a branch atual, ou "" se indeterminada.
+// CurrentBranch returns the current branch, or "" if undetermined.
 func CurrentBranch(dir string) string {
 	repo, err := gogit.PlainOpen(dir)
 	if err != nil {
@@ -110,7 +112,7 @@ func CurrentBranch(dir string) string {
 	return head.Name().Short()
 }
 
-// HasRemote indica se o remote nomeado existe com URL.
+// HasRemote reports whether the named remote exists with a URL.
 func HasRemote(dir, name string) bool {
 	repo, err := gogit.PlainOpen(dir)
 	if err != nil {
@@ -120,7 +122,7 @@ func HasRemote(dir, name string) bool {
 	return err == nil && len(r.Config().URLs) > 0
 }
 
-// Changes indica se há mudanças no working tree.
+// Changes reports whether there are changes in the working tree.
 func Changes(dir string) bool {
 	repo, err := gogit.PlainOpen(dir)
 	if err != nil {

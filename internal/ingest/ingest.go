@@ -1,6 +1,6 @@
-// Package ingest copia uma entrada (arquivo/URL/tweet) para raw/ imutável,
-// registra em raw_sources (dedup por sha256) e extrai seu markdown. Porta
-// determinística de scripts/ingest_raw.rb.
+// Package ingest copies an input (file/URL/tweet) into the immutable raw/,
+// records it in raw_sources (dedup by sha256), and extracts its markdown.
+// Deterministic port of scripts/ingest_raw.rb.
 package ingest
 
 import (
@@ -17,20 +17,20 @@ import (
 
 var urlRE = regexp.MustCompile(`(?i)^https?://`)
 
-// Result é o JSON de saída (formato varia conforme o caso).
+// Result is the output JSON (the shape varies by case).
 type Result struct {
 	SourceType    string `json:"source_type"`
 	RawID         int64  `json:"raw_id,omitempty"`
 	RawPath       string `json:"raw_path,omitempty"`
 	ExtractedPath string `json:"extracted_path,omitempty"`
 	Duplicate     bool   `json:"duplicate,omitempty"`
-	// caso "unknown":
+	// "unknown" case:
 	Ext   string `json:"ext,omitempty"`
 	Sniff string `json:"sniff,omitempty"`
 	Input string `json:"input,omitempty"`
 }
 
-// IngestRaw detecta a fonte, copia para raw/, deduplica por sha256 e extrai.
+// IngestRaw detects the source, copies to raw/, dedups by sha256, and extracts.
 func IngestRaw(db *sql.DB, input, typeOverride string, force bool, rawDir, tmpDir string) (Result, error) {
 	isURL := urlRE.MatchString(input)
 	if !isURL {
@@ -50,7 +50,7 @@ func IngestRaw(db *sql.DB, input, typeOverride string, force bool, rawDir, tmpDi
 	}
 	ing, ok := src.(sources.Ingestable)
 	if !ok {
-		return Result{}, fmt.Errorf("fonte %s não é ingerível", src.KindKey())
+		return Result{}, fmt.Errorf("source %s is not ingestable", src.KindKey())
 	}
 
 	timestamp := time.Now().UTC().Format("20060102T150405Z")
@@ -65,7 +65,7 @@ func IngestRaw(db *sql.DB, input, typeOverride string, force bool, rawDir, tmpDi
 		Scan(&existingID, &existingPath)
 	switch {
 	case err == nil && !force:
-		// duplicata: remove o raw recém-escrito se difere do já registrado.
+		// duplicate: remove the just-written raw if it differs from the recorded one.
 		if rawInfo.Path != existingPath {
 			os.Remove(rawInfo.Path)
 		}

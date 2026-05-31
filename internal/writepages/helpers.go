@@ -19,7 +19,7 @@ func dirExists(p string) bool {
 	return err == nil && fi.IsDir()
 }
 
-// basenamesSet devolve os basenames (sem .md) que casam o glob.
+// basenamesSet returns the basenames (without .md) matching the glob.
 func basenamesSet(glob string) map[string]bool {
 	set := map[string]bool{}
 	matches, _ := filepath.Glob(glob)
@@ -49,8 +49,8 @@ func copyFile(src, dst string) error {
 	return err
 }
 
-// toStrings normaliza nil/string/[]any/[]string numa fatia de strings (espelha
-// Array(x) do Ruby para valores de frontmatter).
+// toStrings normalizes nil/string/[]any/[]string into a string slice (mirrors
+// Ruby's Array(x) for frontmatter values).
 func toStrings(v any) []string {
 	switch x := v.(type) {
 	case nil:
@@ -86,7 +86,7 @@ func orStr(a, b string) string {
 	return b
 }
 
-// uniq deduplica preservando a ordem.
+// uniq deduplicates while preserving order.
 func uniq(in []string) []string {
 	seen := map[string]bool{}
 	out := []string{}
@@ -108,8 +108,8 @@ func contains(haystack []string, needle string) bool {
 	return false
 }
 
-// collapse devolve a única string quando há uma só fonte, senão a fatia (espelha
-// `sources.size == 1 ? sources.first : sources`).
+// collapse returns the single string when there's only one source, otherwise
+// the slice (mirrors `sources.size == 1 ? sources.first : sources`).
 func collapse(sources []string) any {
 	if len(sources) == 1 {
 		return sources[0]
@@ -117,7 +117,7 @@ func collapse(sources []string) any {
 	return sources
 }
 
-// nz garante fatia não-nil (pra JSON serializar [] e não null).
+// nz ensures a non-nil slice (so JSON serializes [] and not null).
 func nz(s []string) []string {
 	if s == nil {
 		return []string{}
