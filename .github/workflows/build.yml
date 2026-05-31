@@ -1,22 +1,24 @@
 name: build
 
-# A cada commit na main: roda os testes e regenera o binário vbrain para
-# todos os alvos, publicando numa release rolling "latest". Tudo é puro-Go
-# (modernc.org/sqlite, go-git, chromedp), então cross-compila de um runner só
-# com CGO_ENABLED=0 — sem matriz de SOs.
+# On every commit to main: run the tests, rebuild the vbrain binary for all
+# targets, and publish a versioned tag + release with an auto-generated
+# changelog. Everything is pure-Go (modernc.org/sqlite, go-git, chromedp), so it
+# cross-compiles from a single runner with CGO_ENABLED=0 — no OS matrix.
 on:
   push:
     branches: [main]
   workflow_dispatch: {}
 
 permissions:
-  contents: write   # criar/atualizar a release "latest"
+  contents: write # create tags and releases
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so --generate-notes can diff against the previous tag
 
       - uses: actions/setup-go@v5
         with:
@@ -42,14 +44,28 @@ jobs:
           (cd dist && sha256sum vbrain-* > SHA256SUMS)
           ls -la dist
 
-      - name: Publish rolling "latest" release
+      - name: Tag + release with changelog
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          notes="Build automático do commit ${GITHUB_SHA}."
+          # Monotonic version from the run number (e.g. v0.1.42). gh creates the
+          # tag at this commit and --generate-notes builds the changelog from the
+          # commits/PRs since the previous tag.
+          tag="v0.1.${{ github.run_number }}"
+          gh release create "$tag" dist/* \
+            --title "$tag" \
+            --target "$GITHUB_SHA" \
+            --generate-notes
+
+      - name: Update rolling "latest" (back-compat for already-shipped binaries)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # `vbrain update` from older binaries fetches /releases/download/latest;
+          # keep that tag pointing at the freshest build so they keep working.
           if gh release view latest >/dev/null 2>&1; then
             gh release upload latest dist/* --clobber
           else
             gh release create latest dist/* \
-              --title "latest" --notes "$notes" --prerelease
+              --title latest --notes "Rolling latest build." --prerelease
           fi

@@ -19,9 +19,9 @@ import (
 // Repo is vbrain's release repository.
 const Repo = "virtual360-io/vbrain"
 
-// DefaultBaseURL points at the rolling "latest" tag (independent of the
-// prerelease flag, unlike /releases/latest/).
-var DefaultBaseURL = "https://github.com/" + Repo + "/releases/download/latest"
+// DefaultBaseURL points at the "latest release" alias, which GitHub redirects to
+// the newest non-prerelease release (the versioned ones the CI publishes).
+var DefaultBaseURL = "https://github.com/" + Repo + "/releases/latest/download"
 
 // Result summarizes the update (JSON on stdout).
 type Result struct {

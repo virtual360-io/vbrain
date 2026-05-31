@@ -149,7 +149,7 @@ data in a tmpdir via `VBRAIN_HOME` / explicit dirs.
 
 ```bash
 # e.g. Linux x86-64
-curl -L -o vbrain https://github.com/virtual360-io/vbrain/releases/download/latest/vbrain-linux-amd64
+curl -L -o vbrain https://github.com/virtual360-io/vbrain/releases/latest/download/vbrain-linux-amd64
 chmod +x vbrain
 ./vbrain install        # or: ./vbrain install --github private --no-prompt
 ```
