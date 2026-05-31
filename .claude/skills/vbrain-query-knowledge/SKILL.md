@@ -1,13 +1,19 @@
 ---
 name: vbrain-query-knowledge
-description: Queries the vbrain base (SQLite FTS5) and returns relevant excerpts in markdown. kind=realtime pages trigger live handlers (Google Calendar, Gmail, and Slack via MCP) instead of returning the body. Use when the user asks something that might be archived ("what do I know about X", "search vbrain for Y"), or when another agent needs persisted context for a task.
+description: Answers a question from your vbrain notes — searches the base (SQLite FTS5) internally and replies in natural, synthesized language, without exposing vbrain's internals (no paths, filenames, page/kind/tag metadata, or citation lists). It may infer a conclusion the notes don't state verbatim, as long as every supporting fact comes from the notes. kind=realtime pages trigger live handlers (Google Calendar, Gmail, and Slack via MCP). Use when the user asks something that might be archived ("what do I know about X", "how do I usually do Y"), or when another agent needs persisted context for a task.
 allowed-tools: Bash, Read, mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_thread
 ---
 
 # vbrain-query-knowledge
 
-Read skill: runs `vbrain query` against the FTS5 index, formats the result, and
-for `kind: realtime` pages fires the corresponding MCP handler (resolves live).
+Read skill: runs `vbrain query` against the FTS5 index, reads the relevant
+notes, and answers the user in **synthesized natural language** — grounded in
+those notes but **without exposing vbrain's internals**. For `kind: realtime`
+pages it fires the corresponding MCP handler (resolves live).
+
+The search and file reads are internal plumbing. The user only ever sees a clean
+answer, the way a knowledgeable person would reply — never the paths, filenames,
+or metadata behind it.
 
 ## Inputs
 
@@ -66,9 +72,10 @@ vbrain query "<query>" --limit <N> --prefix --no-log --format json
 (`--no-log` here: step 1 already recorded the intent; the prefix retry should
 not duplicate the line in `query_log`.)
 
-If still empty: "No results found for `<query>` in the vbrain base. Try more
-general terms or check whether something was ingested with
-`/vbrain-add-knowledge`."
+If still empty, the notes don't cover it. Tell the user plainly — e.g. "I don't
+have anything on that in your notes yet" — and offer to add it via
+`/vbrain-add-knowledge`. Don't describe internal structure or say "no page
+exists".
 
 ### 3. Realtime page dispatch
 
@@ -219,31 +226,57 @@ If the user asks for a specific full thread ("open that conversation"), call
 `mcp__claude_ai_Slack__slack_read_thread` with the `channel_id` and the parent
 message's `message_ts`.
 
-### 4. Format the response
+### 4. Answer the user (synthesized — no vbrain internals)
 
-Keep the **FTS5 order** (SQLite rank): if the realtime page landed 3rd, show the
-2 static ones first, then the realtime block, then the rest.
+You now have the FTS5 hits (and any realtime handler output). To answer:
 
-For static results:
-- Title + path `wiki/<path>`
-- Snippet (already comes with `**term**` highlighted)
-- Tags if relevant
+1. **Gather evidence**: read the full body of the top relevant hits — use each
+   result's `path` to `Read` `~/vbrain/wiki/<path>`. The snippet alone is rarely
+   enough to answer well. Paths, filenames, and page structure are for YOU only.
+2. **Synthesize a direct answer** to the user's question, in natural language, as
+   if you simply know it (it's their own knowledge). You MAY infer or deduce a
+   conclusion the notes don't state verbatim — **as long as every supporting
+   fact comes from the retrieved content**, never from outside knowledge.
+3. Lead with the answer. Keep it tight and conversational.
 
-For realtime results:
-- Header: `## <Title> (realtime — <source>)`
-- Block rendered by the handler
+**Never expose the guts of vbrain in the answer.** Do NOT mention or show:
 
-When the caller is another agent (heuristic: the question came from a `Task`),
-read the full file of the top 3 static results and include the markdown body.
+- file paths, slugs, or filenames (`wiki/…`, `*.md`);
+- the words "page", "index", "the base", "FTS5", "snippet", "frontmatter",
+  "wiki";
+- `kind` / `tags` / label / `source_raw` metadata;
+- a "Sources" / "References" list, or per-claim citations.
+
+Write the way a knowledgeable person answers, not the way a database reports. If
+the deduction needed a leap, you can say "based on how you've described X…" — but
+keep it about the *content*, not about where it's stored.
+
+Only if the user **explicitly** asks where something came from (e.g. "which note
+is that in?") do you name the relevant notes.
+
+For realtime results: fold the live handler output (calendar/gmail/slack)
+straight into the answer — present the events/threads/messages, not the plumbing.
+
+**Agent-caller exception** (heuristic: the question came from a `Task` — a
+machine consumer, not a person): there, fuller raw context helps. Read the top 3
+bodies and include the markdown so the calling agent has the material.
 
 ## Rules
 
 - **Don't modify** anything — this skill is read-only.
 - If the query has `< 3 characters` of significant content, ask for a more
-  specific query before running.
-- Don't invent content: a bad snippet → "these pages mention the term but may
-  not answer it directly".
-- For realtime, if the MCP fails (not connected, no permission), report it
-  explicitly: "couldn't query `<source>` live: <error>; reconnect via
-  `/vbrain-add-realtime-knowledge`". Never fall back to the body snippet — the
-  body only has keywords, it's not an answer.
+  specific query first.
+- **Faithfulness with inference**: you may deduce conclusions the notes don't
+  state explicitly, but every supporting fact must be present in the retrieved
+  content — never import outside knowledge, never fabricate. If you inferred
+  rather than read it directly, that's fine; just don't present a guess as a
+  recorded fact.
+- **Honest when absent**: if the notes don't support an answer, say so plainly
+  ("I don't have anything on that in your notes") and offer `/vbrain-add-knowledge`
+  — without describing the internal structure or that "no page exists".
+- **No internals, ever** (unless explicitly asked): the answer carries no paths,
+  filenames, metadata, or citation lists. The user wants the knowledge, not the
+  filing system.
+- For realtime, if the MCP fails (not connected, no permission), say you couldn't
+  reach the live source and to reconnect via `/vbrain-add-realtime-knowledge`.
+  Never fall back to the body keywords — they're not an answer.
