@@ -4,10 +4,18 @@
 package sources
 
 // Source é uma fonte de conhecimento ingerível. Detecção e identidade são
-// determinísticas; cada implementação concreta expõe seu próprio Extract.
+// determinísticas (Regra 5).
 type Source interface {
 	KindKey() string
 	Detect(input string) bool
+}
+
+// Ingestable é uma Source que sabe copiar a entrada para raw/ e extrair seu
+// markdown. Todas as fontes concretas (Text/URL/Twitter) implementam isto.
+type Ingestable interface {
+	Source
+	CopyToRaw(input, rawDir, timestamp string) (RawInfo, error)
+	Extract(input, outPath string, info RawInfo) error
 }
 
 // Registry define a ordem de precedência: Twitter ganha de Url (tweet é uma

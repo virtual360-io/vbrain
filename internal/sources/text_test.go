@@ -54,7 +54,7 @@ func TestTextExtractWritesPassthrough(t *testing.T) {
 	if err := os.WriteFile(src, []byte("Olá Mundo\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := (sources.Text{}).Extract(src, out); err != nil {
+	if err := (sources.Text{}).Extract(src, out, sources.RawInfo{}); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(out); string(b) != "Olá Mundo\n" {

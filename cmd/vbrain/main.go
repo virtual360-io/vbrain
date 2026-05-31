@@ -13,6 +13,7 @@ import (
 	"github.com/virtual360-io/vbrain/internal/db"
 	"github.com/virtual360-io/vbrain/internal/git"
 	"github.com/virtual360-io/vbrain/internal/index"
+	"github.com/virtual360-io/vbrain/internal/ingest"
 	"github.com/virtual360-io/vbrain/internal/paths"
 	"github.com/virtual360-io/vbrain/internal/resolvelinks"
 	"github.com/virtual360-io/vbrain/internal/search"
@@ -21,7 +22,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "uso: vbrain <reindex|query|commit|write-pages|resolve-links> [args]")
+		fmt.Fprintln(os.Stderr, "uso: vbrain <reindex|query|ingest|write-pages|resolve-links|commit> [args]")
 		os.Exit(2)
 	}
 	var err error
@@ -36,6 +37,8 @@ func main() {
 		err = cmdWritePages(os.Args[2:])
 	case "resolve-links":
 		err = cmdResolveLinks(os.Args[2:])
+	case "ingest":
+		err = cmdIngest(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "subcomando desconhecido: %q\n", os.Args[1])
 		os.Exit(2)
@@ -276,6 +279,36 @@ func cmdResolveLinks(args []string) error {
 		return err
 	}
 	res, err := resolvelinks.ResolveLinks(paths.WikiDir(), mapping)
+	if err != nil {
+		return err
+	}
+	return emitJSON(res)
+}
+
+func cmdIngest(args []string) error {
+	fs := flag.NewFlagSet("ingest", flag.ContinueOnError)
+	typeOverride := fs.String("type", "", "força o tipo de fonte (text|url|tweet)")
+	force := fs.Bool("force", false, "ingere mesmo se sha256 duplicado")
+
+	flagArgs, positionals := splitArgs(args)
+	if err := fs.Parse(flagArgs); err != nil {
+		return err
+	}
+	if len(positionals) == 0 {
+		return fmt.Errorf("uso: vbrain ingest <path-or-url> [--type T] [--force]")
+	}
+	input := positionals[0]
+
+	if err := paths.EnsureDirs(); err != nil {
+		return err
+	}
+	d, err := db.Open(paths.DBPath())
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+
+	res, err := ingest.IngestRaw(d, input, *typeOverride, *force, paths.RawDir(), paths.TmpDir())
 	if err != nil {
 		return err
 	}

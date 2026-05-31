@@ -2,12 +2,20 @@ package sources
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"math"
+	nethttp "net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Twitter é a fonte para tweets/X (lidos via API pública de syndication).
@@ -46,6 +54,102 @@ func (Twitter) ComputeToken(id string) string {
 	}
 	s = strings.TrimRight(s, "0")
 	return strings.ReplaceAll(s, ".", "")
+}
+
+const (
+	syndicationURL  = "https://cdn.syndication.twimg.com/tweet-result"
+	twitterUA       = "vbrain/1.0"
+	syndicationTimeout = 10 * time.Second
+)
+
+// FetchSyndication busca o JSON do tweet via API pública de syndication. Var de
+// pacote para override determinístico nos testes.
+var FetchSyndication = func(id string) (string, error) {
+	token := (Twitter{}).ComputeToken(id)
+	u := syndicationURL + "?id=" + id + "&lang=en&token=" + token
+	req, err := nethttp.NewRequest(nethttp.MethodGet, u, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", twitterUA)
+	req.Header.Set("Accept", "application/json")
+	client := &nethttp.Client{Timeout: syndicationTimeout}
+	res, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return "", fmt.Errorf("syndication HTTP %d", res.StatusCode)
+	}
+	return string(body), nil
+}
+
+// FetchArticleViaPlaywright é o grab opcional do corpo de artigo via browser.
+// Ainda não portado para Go; retorna "" (degrada para preview_text, idêntico ao
+// Ruby quando o Playwright não está disponível). É o único recurso de sources
+// pendente de port.
+var FetchArticleViaPlaywright = func(tweetURL string) string { return "" }
+
+// CopyToRaw busca o JSON do tweet e grava em raw/.
+func (Twitter) CopyToRaw(input, rawDir, timestamp string) (RawInfo, error) {
+	id, err := (Twitter{}).ParseID(input)
+	if err != nil {
+		return RawInfo{}, err
+	}
+	jsonStr, err := FetchSyndication(id)
+	if err != nil {
+		return RawInfo{}, err
+	}
+	basename := timestamp + "-tweet-" + id + ".json"
+	dest := filepath.Join(rawDir, basename)
+	if err := os.MkdirAll(rawDir, 0o755); err != nil {
+		return RawInfo{}, err
+	}
+	if err := os.WriteFile(dest, []byte(jsonStr), 0o644); err != nil {
+		return RawInfo{}, err
+	}
+	sum := sha256.Sum256([]byte(input + "\n" + jsonStr))
+	return RawInfo{
+		Path: dest, OriginalFilename: basename, SHA256: hex.EncodeToString(sum[:]),
+		TweetID: id, JSON: jsonStr,
+	}, nil
+}
+
+// Extract renderiza o markdown do tweet (do cache em info, ou buscando). Se o
+// tweet tem artigo embutido, tenta o grab completo via Playwright (best-effort).
+func (Twitter) Extract(input, outPath string, info RawInfo) error {
+	id := info.TweetID
+	if id == "" {
+		var err error
+		if id, err = (Twitter{}).ParseID(input); err != nil {
+			return err
+		}
+	}
+	jsonStr := info.JSON
+	if jsonStr == "" {
+		var err error
+		if jsonStr, err = FetchSyndication(id); err != nil {
+			return err
+		}
+	}
+	data, err := decodeJSON(jsonStr)
+	if err != nil {
+		return err
+	}
+	articleFull := ""
+	if data["article"] != nil {
+		articleFull = FetchArticleViaPlaywright("https://x.com/i/status/" + id + "?s=20")
+	}
+	md, err := (Twitter{}).ExtractFromJSON(jsonStr, input, id, articleFull)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(outPath, []byte(md), 0o644)
 }
 
 // ExtractFromJSON renderiza o markdown da página a partir do JSON do tweet. Se
