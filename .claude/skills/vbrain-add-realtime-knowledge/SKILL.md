@@ -21,9 +21,9 @@ ao vivo em vez de devolver o body.
 
 | `source`    | Status      | Script determinístico                    |
 |---|---|---|
-| `gcalendar` | suportado   | `scripts/add_realtime/gcalendar.rb`      |
-| `gmail`     | suportado   | `scripts/add_realtime/gmail.rb`          |
-| `slack`     | suportado   | `scripts/add_realtime/slack.rb`          |
+| `gcalendar` | suportado   | `vbrain realtime gcalendar`      |
+| `gmail`     | suportado   | `vbrain realtime gmail`          |
+| `slack`     | suportado   | `vbrain realtime slack`          |
 | outro       | improvise   | pergunte ao usuário detalhes da conexão  |
 
 ## Passos
@@ -40,7 +40,7 @@ Se o usuário não passou `source`, use `AskUserQuestion`:
 
 Se a resposta for "outra" ou um valor não suportado, peça ao usuário pra
 descrever a fonte. Pergunte se ele quer que você crie uma fonte
-determinística (com script Ruby e teste) ou apenas uma página fantasma
+determinística (com binário vbrain e teste) ou apenas uma página fantasma
 "manual" agora. Em caso de "manual", você pode escrever
 `wiki/_realtime/<slug>.md` diretamente com `kind: realtime` e os campos que
 fizerem sentido — mas avise que isso é uma fonte one-shot sem handler ao
@@ -75,12 +75,12 @@ explicitamente ao usuário no relatório final: "Conectei todos os calendários
 visíveis exceto os genéricos do Google. Pra refinar, rode
 `/vbrain-add-realtime-knowledge gcalendar` de novo numa sessão interativa
 ou edite manualmente `~/vbrain/config/realtime/gcalendar.yml` e rode
-`scripts/reindex.rb`."
+`vbrain reindex`."
 
-**2c. Montar JSON e rodar o script Ruby:**
+**2c. Montar JSON e rodar o binário vbrain:**
 
 ```bash
-bundle exec ruby scripts/add_realtime/gcalendar.rb --calendars-json '<JSON>'
+vbrain realtime gcalendar --json '<JSON>'
 ```
 
 Onde `<JSON>` é uma string JSON com a chave `calendars`, cada item
@@ -101,13 +101,13 @@ O script:
 **2d. Reindexar** pra a página fantasma entrar no FTS5:
 
 ```bash
-bundle exec ruby scripts/reindex.rb
+vbrain reindex
 ```
 
 **2e. Commit (se houver repo git no `~/vbrain`):**
 
 ```bash
-bundle exec ruby scripts/commit.rb --message "realtime: conecta gcalendar (<N> calendários)"
+vbrain commit --message "realtime: conecta gcalendar (<N> calendários)"
 ```
 
 Onde `<N>` é o número de calendários conectados.
@@ -139,13 +139,13 @@ aparecem mas existem com IDs bem-conhecidos: `INBOX`, `IMPORTANT`, `STARRED`,
 `INBOX` + `IMPORTANT` por default e avise:
 > "Conectei INBOX + IMPORTANT. Pra refinar, edite
 > `~/vbrain/config/realtime/gmail.yml` (adicione objetos `{id, name}` à
-> chave `labels`) e rode `scripts/reindex.rb`, ou rode
+> chave `labels`) e rode `vbrain reindex`, ou rode
 > `/vbrain-add-realtime-knowledge gmail` numa sessão interativa."
 
-**2bis-d. Montar JSON e rodar o script Ruby:**
+**2bis-d. Montar JSON e rodar o binário vbrain:**
 
 ```bash
-bundle exec ruby scripts/add_realtime/gmail.rb --labels-json '<JSON>'
+vbrain realtime gmail --json '<JSON>'
 ```
 
 Onde `<JSON>` é uma string JSON com a chave `labels`, cada item
@@ -207,12 +207,12 @@ Não tente bypassar.
 > "Conectei o Slack em modo global (busca no workspace inteiro). Pra
 > restringir a canais, rode `/vbrain-add-realtime-knowledge slack` numa
 > sessão interativa ou edite `~/vbrain/config/realtime/slack.yml` (adicione
-> objetos `{id, name}` à chave `channels`) e rode `scripts/reindex.rb`."
+> objetos `{id, name}` à chave `channels`) e rode `vbrain reindex`."
 
-**2ter-c. Montar JSON e rodar o script Ruby:**
+**2ter-c. Montar JSON e rodar o binário vbrain:**
 
 ```bash
-bundle exec ruby scripts/add_realtime/slack.rb --channels-json '<JSON>'
+vbrain realtime slack --json '<JSON>'
 ```
 
 Onde `<JSON>` é uma string JSON com a chave `channels`, cada item
@@ -253,7 +253,7 @@ Mostre ao usuário:
   configuração. Listar calendários/labels é OK; buscar eventos/threads é
   responsabilidade do `/vbrain-query-knowledge`.
 - **Nunca** escreva em `wiki/_realtime/` na mão pra fontes suportadas
-  (gcalendar/gmail/slack): sempre vai pelo script Ruby. Pra fontes "outra" sem
+  (gcalendar/gmail/slack): sempre vai pelo binário vbrain. Pra fontes "outra" sem
   script, escrever direto é OK mas avise o usuário que sem handler não vai
   resolver ao vivo.
 - Se o MCP da fonte falhar (não conectado, sem permissão), pare e oriente

@@ -6,14 +6,14 @@ allowed-tools: Bash, Read, mcp__claude_ai_Google_Calendar__list_events, mcp__cla
 
 # vbrain-query-knowledge
 
-Skill de leitura: roda `scripts/query.rb` contra o índice FTS5, formata o
+Skill de leitura: roda `vbrain query` contra o índice FTS5, formata o
 resultado, e para páginas com `kind: realtime` dispara o handler MCP
 correspondente (resolve ao vivo).
 
 ## Inputs
 
 - **query** (obrigatório): pergunta livre ou keyword. Pode conter `:`, aspas,
-  parênteses — o normalizador Ruby cuida disso.
+  parênteses — o normalizador cuida disso.
 - **limit** (opcional, default 10): número máximo de páginas a retornar.
 
 ## Passos
@@ -22,7 +22,7 @@ correspondente (resolve ao vivo).
 
 O FTS5 é lexical: a pergunta `"quais empregos eu já tive"` não casa nada
 porque a palavra "emprego" não está no corpus (as páginas dizem "Visagio",
-"consultor", "carreira"). O Ruby já remove stopwords, mas não inventa
+"consultor", "carreira"). O vbrain já remove stopwords, mas não inventa
 sinônimos — esse é o seu julgamento.
 
 Pule este passo se a `query` já é keyword(s) (1–3 termos técnicos, um nome
@@ -31,10 +31,10 @@ próprio, um slug). Faça-o quando for pergunta em linguagem natural.
 1. Puxe o vocabulário real de tags da base:
 
 ```bash
-bundle exec ruby scripts/tags.rb --limit 60
+vbrain tags --limit 60
 ```
 
-(`tags.rb` já devolve JSON no stdout — não tem `--format`.)
+(`vbrain tags` já devolve JSON no stdout — não tem `--format`.)
 
 2. Reescreva a pergunta num punhado de **termos de conteúdo** (4–8), enviesado
    pelo vocabulário acima. Inclua sinônimos/forma flexionada e, quando houver,
@@ -49,7 +49,7 @@ bundle exec ruby scripts/tags.rb --limit 60
 ### 1. FTS5
 
 ```bash
-bundle exec ruby scripts/query.rb "<query>" --limit <N> --source-query "<pergunta original>" --format json
+vbrain query "<query>" --limit <N> --source-query "<pergunta original>" --format json
 ```
 
 Parseie `results`. Cada item tem `path`, `title`, `kind`, `snippet`.
@@ -61,7 +61,7 @@ Se `results` vier vazio, tente o passo 2 (prefix). Caso contrário pule pro 3.
 ### 2. Fallback com prefix matching
 
 ```bash
-bundle exec ruby scripts/query.rb "<query>" --limit <N> --prefix --no-log --format json
+vbrain query "<query>" --limit <N> --prefix --no-log --format json
 ```
 
 (`--no-log` aqui: o passo 1 já registrou a intenção; o retry com prefix não
