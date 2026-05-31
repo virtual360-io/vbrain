@@ -29,7 +29,11 @@ clone (ex.: cloud) só com Ruby 3.3.6 + `bundle install`, sem precisar deste
 repo. O código aqui continua o **canônico**; a cópia na base é sincronizada
 re-rodando o install (a duplicação é intencional — trade-off por portabilidade).
 
-`VBRAIN_HOME` sobrescreve a localização da base (ex.: `~/Documents/vbrain`).
+A base é resolvida nesta ordem: (1) `VBRAIN_HOME`, se setado, sobrescreve tudo
+(ex.: `~/Documents/vbrain`); (2) senão, se o código está rodando de dentro de
+uma base (o checkout carrega a própria `wiki/`, como no cloud onde repo ==
+base), usa essa base — assim as skills/sub-agentes acham os dados sem herdar
+`VBRAIN_HOME` do shell; (3) senão, `~/vbrain`.
 A wiki vira um repo git separado no primeiro `add-knowledge` — privado, público
 ou só-local conforme escolha do usuário (ver `scripts/init_repo.rb`).
 
