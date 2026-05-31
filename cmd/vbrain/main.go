@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,14 +11,17 @@ import (
 	"strings"
 
 	"github.com/virtual360-io/vbrain/internal/db"
+	"github.com/virtual360-io/vbrain/internal/git"
 	"github.com/virtual360-io/vbrain/internal/index"
 	"github.com/virtual360-io/vbrain/internal/paths"
+	"github.com/virtual360-io/vbrain/internal/resolvelinks"
 	"github.com/virtual360-io/vbrain/internal/search"
+	"github.com/virtual360-io/vbrain/internal/writepages"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "uso: vbrain <reindex|query> [args]")
+		fmt.Fprintln(os.Stderr, "uso: vbrain <reindex|query|commit|write-pages|resolve-links> [args]")
 		os.Exit(2)
 	}
 	var err error
@@ -26,6 +30,12 @@ func main() {
 		err = cmdReindex(os.Args[2:])
 	case "query":
 		err = cmdQuery(os.Args[2:])
+	case "commit":
+		err = cmdCommit(os.Args[2:])
+	case "write-pages":
+		err = cmdWritePages(os.Args[2:])
+	case "resolve-links":
+		err = cmdResolveLinks(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "subcomando desconhecido: %q\n", os.Args[1])
 		os.Exit(2)
@@ -121,6 +131,155 @@ func splitArgs(args []string) (flagArgs, positionals []string) {
 		positionals = append(positionals, a)
 	}
 	return flagArgs, positionals
+}
+
+func cmdCommit(args []string) error {
+	fs := flag.NewFlagSet("commit", flag.ContinueOnError)
+	message := fs.String("message", "", "mensagem de commit")
+	noPush := fs.Bool("no-push", false, "não dar push")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *message == "" {
+		return fmt.Errorf("--message é obrigatório")
+	}
+
+	dataHome := paths.DataHome()
+	if !git.RepoInitialized(dataHome) {
+		return emitJSON(map[string]any{
+			"committed": false, "pushed": false,
+			"reason": "no git repo in " + dataHome,
+		})
+	}
+
+	commit, err := git.Commit(*message, dataHome)
+	if err != nil {
+		return err
+	}
+	out := map[string]any{"committed": commit.Committed}
+	if commit.SHA != "" {
+		out["sha"] = commit.SHA
+	}
+	if commit.Message != "" {
+		out["message"] = commit.Message
+	}
+	if commit.Reason != "" {
+		out["reason"] = commit.Reason
+	}
+
+	if *noPush || !commit.Committed {
+		out["pushed"] = false
+		if *noPush {
+			out["reason"] = "no-push"
+		} else {
+			out["reason"] = commit.Reason
+		}
+	} else {
+		push, err := git.Push(dataHome, "origin", "")
+		if err != nil {
+			return err
+		}
+		out["pushed"] = push.Pushed
+		if push.Reason != "" {
+			out["reason"] = push.Reason
+		}
+		if push.Remote != "" {
+			out["remote"] = push.Remote
+		}
+		if push.Branch != "" {
+			out["branch"] = push.Branch
+		}
+	}
+	return emitJSON(out)
+}
+
+func cmdWritePages(args []string) error {
+	fs := flag.NewFlagSet("write-pages", flag.ContinueOnError)
+	rawID := fs.Int("raw-id", 0, "id do raw_source")
+	pagesJSON := fs.String("pages-json", "", "caminho do JSON de páginas")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *rawID == 0 || *pagesJSON == "" {
+		return fmt.Errorf("--raw-id e --pages-json são obrigatórios")
+	}
+
+	data, err := os.ReadFile(*pagesJSON)
+	if err != nil {
+		return err
+	}
+	var pages []writepages.PageInput
+	if t := bytes.TrimSpace(data); len(t) > 0 && t[0] == '[' {
+		if err := json.Unmarshal(data, &pages); err != nil {
+			return err
+		}
+	} else {
+		var wrapper struct {
+			Pages []writepages.PageInput `json:"pages"`
+		}
+		if err := json.Unmarshal(data, &wrapper); err != nil {
+			return err
+		}
+		pages = wrapper.Pages
+	}
+
+	if err := paths.EnsureDirs(); err != nil {
+		return err
+	}
+	d, err := db.Open(paths.DBPath())
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+
+	res, err := writepages.WritePages(d, *rawID, pages, paths.WikiDir(), paths.TmpDir(), paths.DataHome())
+	if err != nil {
+		return err
+	}
+	if err := emitJSON(res); err != nil {
+		return err
+	}
+	if res.NeedsReview {
+		os.Exit(3) // guardrail de órfãos: agente precisa revisar
+	}
+	return nil
+}
+
+func cmdResolveLinks(args []string) error {
+	fs := flag.NewFlagSet("resolve-links", flag.ContinueOnError)
+	mapPath := fs.String("map", "", "caminho do JSON {título: slug}")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *mapPath == "" {
+		return fmt.Errorf("--map é obrigatório")
+	}
+
+	data, err := os.ReadFile(*mapPath)
+	if err != nil {
+		return err
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("map deve ser um objeto JSON {título: slug}: %w", err)
+	}
+	mapping := map[string]string{}
+	for k, v := range raw {
+		if s, ok := v.(string); ok {
+			mapping[k] = s
+		} else {
+			mapping[k] = "" // null/outros → descartado em ResolveLinks
+		}
+	}
+
+	if err := paths.EnsureDirs(); err != nil {
+		return err
+	}
+	res, err := resolvelinks.ResolveLinks(paths.WikiDir(), mapping)
+	if err != nil {
+		return err
+	}
+	return emitJSON(res)
 }
 
 func emitJSON(v any) error {
