@@ -16,14 +16,14 @@ func TestWritesClaudeMDInstructingToUseSkills(t *testing.T) {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
 	body, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
-	for _, want := range []string{"SEMPRE use as skills", "/vbrain-query-knowledge", "/vbrain-add-knowledge"} {
+	for _, want := range []string{"ALWAYS use the vbrain skills", "/vbrain-query-knowledge", "/vbrain-add-knowledge"} {
 		if !strings.Contains(string(body), want) {
-			t.Errorf("CLAUDE.md sem %q", want)
+			t.Errorf("CLAUDE.md missing %q", want)
 		}
 	}
-	// Go-orientado: menciona o binário vbrain, não Ruby/bundle.
+	// Go-oriented: mentions the vbrain binary, not Ruby/bundle.
 	if !strings.Contains(string(body), "`vbrain`") || strings.Contains(string(body), "bundle install") {
-		t.Error("CLAUDE.md deveria ser Go-orientado")
+		t.Error("CLAUDE.md should be Go-oriented")
 	}
 }
 
