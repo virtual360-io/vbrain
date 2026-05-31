@@ -86,12 +86,6 @@ var FetchSyndication = func(id string) (string, error) {
 	return string(body), nil
 }
 
-// FetchArticleViaPlaywright é o grab opcional do corpo de artigo via browser.
-// Ainda não portado para Go; retorna "" (degrada para preview_text, idêntico ao
-// Ruby quando o Playwright não está disponível). É o único recurso de sources
-// pendente de port.
-var FetchArticleViaPlaywright = func(tweetURL string) string { return "" }
-
 // CopyToRaw busca o JSON do tweet e grava em raw/.
 func (Twitter) CopyToRaw(input, rawDir, timestamp string) (RawInfo, error) {
 	id, err := (Twitter{}).ParseID(input)
@@ -140,7 +134,7 @@ func (Twitter) Extract(input, outPath string, info RawInfo) error {
 	}
 	articleFull := ""
 	if data["article"] != nil {
-		articleFull = FetchArticleViaPlaywright("https://x.com/i/status/" + id + "?s=20")
+		articleFull = FetchArticleViaBrowser("https://x.com/i/status/" + id + "?s=20")
 	}
 	md, err := (Twitter{}).ExtractFromJSON(jsonStr, input, id, articleFull)
 	if err != nil {
