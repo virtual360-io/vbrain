@@ -93,14 +93,19 @@ func brewManaged(path string) bool {
 	return strings.Contains(path, sep+"Cellar"+sep)
 }
 
-// brewUpgrade delegates the update to Homebrew. A var so tests can stub it
-// without invoking brew.
+// brewUpgrade delegates the update to Homebrew. It refreshes the tap first
+// (`brew update`) so a freshly-published formula is actually seen, then
+// `brew upgrade vbrain` — otherwise a stale tap clone reports "already
+// installed" against the old version. A var so tests can stub it without
+// invoking brew.
 var brewUpgrade = func() (Result, error) {
-	cmd := exec.Command("brew", "upgrade", "vbrain")
-	cmd.Stdout = os.Stderr // brew's progress is human-facing; stdout stays JSON
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return Result{}, fmt.Errorf("brew upgrade vbrain: %w", err)
+	for _, args := range [][]string{{"update"}, {"upgrade", "vbrain"}} {
+		cmd := exec.Command("brew", args...)
+		cmd.Stdout = os.Stderr // brew's progress is human-facing; stdout stays JSON
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return Result{}, fmt.Errorf("brew %s: %w", strings.Join(args, " "), err)
+		}
 	}
 	return Result{Asset: AssetName(), Method: "homebrew", Updated: true}, nil
 }

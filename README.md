@@ -238,8 +238,9 @@ vbrain update           # downloads the latest release binary (verifies SHA256)
 ```
 
 `vbrain update` is safe on a Homebrew install too: it detects the binary lives
-in a Cellar and delegates to `brew upgrade vbrain`, so the keg stays in sync
-instead of being replaced out-of-band.
+in a Cellar and delegates to `brew update && brew upgrade vbrain` (refreshing the
+tap so a freshly-published formula is seen), so the keg stays in sync instead of
+being replaced out-of-band.
 
 ## Tests
 

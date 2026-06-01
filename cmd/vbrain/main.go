@@ -821,7 +821,7 @@ func cmdUpdate(args []string) error {
 		return err
 	}
 	if res.Method == "homebrew" {
-		fmt.Fprintln(os.Stderr, "updated via Homebrew (brew upgrade vbrain)")
+		fmt.Fprintln(os.Stderr, "updated via Homebrew (brew update && brew upgrade vbrain)")
 	} else {
 		fmt.Fprintf(os.Stderr, "updated: %s → %s\n", res.Asset, res.Path)
 	}
