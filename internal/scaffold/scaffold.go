@@ -34,9 +34,23 @@ and the link graph.
 
 ## Prerequisites
 
-The skills are deterministic and call the **` + "`vbrain`" + `** binary, which must be
-on the PATH (install with ` + "`vbrain install`" + `). No Ruby and no gem install
-needed: ` + "`vbrain`" + ` is a single, self-contained binary.
+The skills are deterministic and call the **` + "`vbrain`" + `** binary on the
+PATH — a single, self-contained binary (no Ruby, no gems). On a fresh box where
+it is missing (e.g. a cloud sandbox that just cloned this base), install it
+before running a skill — whichever fits the machine:
+
+- Go toolchain present (the usual cloud sandbox): run
+  ` + "`go install github.com/virtual360-io/vbrain/cmd/vbrain@latest`" + ` and put the Go
+  bin dir (` + "`go env GOPATH`" + `/bin, usually ~/go/bin) on the PATH.
+- Otherwise download the asset for this OS/arch from the latest GitHub release
+  (https://github.com/virtual360-io/vbrain/releases/latest/download/ —
+  vbrain-linux-intel, vbrain-linux-arm64, vbrain-macos-apple-silicon,
+  vbrain-macos-intel, vbrain-windows-intel.exe), make it executable, put it on
+  the PATH.
+
+This is a no-op where ` + "`vbrain`" + ` is already installed (a normal local
+machine). If a skill's ` + "`vbrain`" + ` call fails with "command not found",
+install it as above and retry.
 
 ## Why (architecture)
 

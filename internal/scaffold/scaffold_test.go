@@ -27,6 +27,26 @@ func TestWritesClaudeMDInstructingToUseSkills(t *testing.T) {
 	}
 }
 
+// A cloned base must be able to bootstrap itself where the binary is absent
+// (the cloud sandbox case): the CLAUDE.md has to tell the agent how to provision
+// `vbrain` on the fly, since the cloud won't auto-run any committed setup. Encode
+// that the self-provision hint (go install + the release URL) is present.
+func TestClaudeMDTellsHowToProvisionVbrainWhenMissing(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := scaffold.WriteClaudeMD(dir); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
+	for _, want := range []string{
+		"go install github.com/virtual360-io/vbrain/cmd/vbrain@latest",
+		"releases/latest/download",
+	} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("CLAUDE.md missing self-provision hint %q", want)
+		}
+	}
+}
+
 func TestDoesNotClobberExistingClaudeMD(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("# custom\n"), 0o644)
