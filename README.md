@@ -164,38 +164,82 @@ data in a tmpdir via `VBRAIN_HOME` / explicit dirs.
 
 ## Setup
 
-1. **Download the binary** from the `latest` release (the asset for your
-   platform — e.g. `vbrain-linux-amd64`), make it executable.
-2. **Run `vbrain install`** — puts the binary on the PATH (`~/.local/bin`),
-   installs the skills (embedded in the binary) into `~/.claude/skills`,
-   bootstraps the base (`CLAUDE.md` + skills + git init + the `soul`/`dream` routines),
-   and runs the GitHub onboarding (git identity + PAT + repo creation) when on a
-   terminal.
+The same two steps on every platform: **download the binary for your machine**
+from the [`latest` release](https://github.com/virtual360-io/vbrain/releases/latest),
+then **run `vbrain install`** — it puts the binary on the PATH, installs the
+skills (embedded in the binary) into `~/.claude/skills`, bootstraps the base
+(`CLAUDE.md` + skills + git init + the `soul`/`dream` routines), and runs the
+GitHub onboarding (git identity + PAT + repo creation) when on a terminal.
 
-```bash
-# e.g. Linux x86-64
-curl -L -o vbrain https://github.com/virtual360-io/vbrain/releases/latest/download/vbrain-linux-amd64
-chmod +x vbrain
-./vbrain install        # or: ./vbrain install --github private --no-prompt
-```
+The asset names say which machine they're for:
 
-Release assets per platform: `vbrain-linux-amd64`, `vbrain-linux-arm64`,
-`vbrain-darwin-amd64` (Intel Mac), `vbrain-darwin-arm64` (Apple Silicon),
-`vbrain-windows-amd64.exe`.
+| Your machine | Asset to download |
+|---|---|
+| **macOS** — Apple Silicon (M1/M2/M3/M4) | `vbrain-macos-apple-silicon` |
+| **macOS** — Intel | `vbrain-macos-intel` |
+| **Linux** — Intel/AMD 64-bit | `vbrain-linux-intel` |
+| **Linux** — ARM 64-bit | `vbrain-linux-arm64` |
+| **Windows** — Intel/AMD 64-bit | `vbrain-windows-intel.exe` |
 
 No Ruby, no gems, no need to clone the repo — `vbrain` is a single,
 self-contained binary (skills included). `VBRAIN_HOME` can be exported to move
-the base.
+the base. Pass `--github private --no-prompt` to `vbrain install` to skip the
+interactive onboarding.
 
-> **macOS note:** the binary is not signed/notarized, so Gatekeeper may block
-> the first run. If so, clear the quarantine flag: `xattr -d com.apple.quarantine vbrain`
-> (or System Settings → Privacy & Security → "Allow anyway").
+### macOS
+
+**Homebrew (recommended)** — no Gatekeeper prompt, and `brew upgrade` keeps it
+fresh. Picks the right binary (Apple Silicon / Intel) automatically:
+
+```bash
+brew tap virtual360-io/vbrain https://github.com/virtual360-io/vbrain
+brew install vbrain
+vbrain install          # installs skills + bootstraps the base (~/vbrain)
+```
+
+**Manual download** — fetch the binary directly:
+
+```bash
+# Apple Silicon (M1/M2/M3/M4). For an Intel Mac, swap the asset for vbrain-macos-intel.
+curl -L -o vbrain https://github.com/virtual360-io/vbrain/releases/latest/download/vbrain-macos-apple-silicon
+chmod +x vbrain
+./vbrain install
+```
+
+> **Why Homebrew avoids the prompt:** the binary is not signed/notarized, so
+> Gatekeeper blocks it on the *first run only when it carries the
+> `com.apple.quarantine` flag* — which browsers set, but `curl` and Homebrew do
+> not. So the `curl` line above is already prompt-free. If you instead download
+> the asset from the releases page in a browser, clear the flag once:
+> `xattr -d com.apple.quarantine vbrain` (or System Settings → Privacy &
+> Security → "Allow anyway").
+
+### Linux
+
+```bash
+# Intel/AMD 64-bit. For ARM (e.g. a Raspberry Pi), swap the asset for vbrain-linux-arm64.
+curl -L -o vbrain https://github.com/virtual360-io/vbrain/releases/latest/download/vbrain-linux-intel
+chmod +x vbrain
+./vbrain install
+```
+
+### Windows (PowerShell)
+
+```powershell
+# Intel/AMD 64-bit.
+Invoke-WebRequest -Uri https://github.com/virtual360-io/vbrain/releases/latest/download/vbrain-windows-intel.exe -OutFile vbrain.exe
+.\vbrain.exe install
+```
 
 ### Update
 
 ```bash
 vbrain update           # downloads the latest release binary (verifies SHA256)
 ```
+
+If you installed via Homebrew, use `brew upgrade vbrain` instead — it keeps the
+brew-managed binary and the formula in sync (`vbrain update` would replace it
+out-of-band).
 
 ## Tests
 
