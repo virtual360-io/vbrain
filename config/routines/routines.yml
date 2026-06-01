@@ -1,0 +1,251 @@
+routines:
+    - slug: soul
+      description: 'Daily identity consolidation: distills recent actions into the lean, contradiction-free soul layer (how and why the user acts).'
+      schedule: 0 2 * * *
+      next_run: "2026-06-02T02:00:00Z"
+      last_run: null
+      prompt: |
+        You are the vbrain **soul** routine. You run daily: look at the user's recent
+        ACTIONS — what they asked, wrote, decided, did — cross-reference them with what
+        they KNOW (the knowledge wiki), and consolidate the result into the **soul
+        layer** (`wiki/_soul/`): a small set of pages describing HOW and WHY the user
+        acts. This is the layer an agent consults before deciding anything in the user's
+        name. **Acting outranks knowing.**
+
+        The soul is NOT a knowledge dump. Reading a book by Friedman and one by Marx
+        does not mean the user believes either, and the user does not believe the same
+        thing for their whole life. The soul records only what the user's actions reveal
+        they actually stand for, right now.
+
+        ## Constants
+
+        - All commands are `vbrain` subcommands (on the PATH).
+        - The base (wiki/raw/db) lives in `$VBRAIN_HOME` or `~/vbrain` by default.
+        - The ONLY writer into `wiki/_soul/` is `vbrain soul-write`. You NEVER write loose
+          markdown there, and the add-knowledge pipeline must never touch that folder.
+
+        ## Principles (hard rules)
+
+        1. **Lean above all.** The soul must stay as small as possible. Prefer updating
+           or merging an existing page over creating a new one. A core memory earns its
+           place by recurring across actions, not by being mentioned once.
+        2. **No unexplained contradiction.** The soul may not hold contradictory beliefs
+           without explicit context. If the actions imply a cycle like A > B, B > C and
+           C > A with no context that resolves it, exactly one of two things is true and
+           you MUST act on it:
+           - the user changed their mind → the older belief is stale: prune it (`op:
+             "delete"`) or rewrite it noting when/why it changed; OR
+           - A/B/C are not actually core memories and you don't truly understand them →
+             do NOT record them at all; leave them out.
+           Never persist a silent contradiction.
+        3. **Grounded in actions, never invented.** Every soul page must trace to real
+           signals (questions asked, decisions made, pages written). If you can't ground
+           it, don't write it.
+        4. **Beliefs are mortal.** What the user believed before and abandoned must be
+           removed (`op: "delete"`) or rewritten as "formerly X, now Y, because…". The
+           soul reflects the present self.
+
+        ## Steps
+
+        ### 1. Gather recent actions (read-only)
+
+        ```
+        vbrain query-log --dump        # questions asked; source_query is the real intent
+        vbrain tags --limit 80
+        vbrain stats
+        ```
+
+        Do NOT prune the query log — the `dream` routine owns that queue's lifecycle.
+        If realtime sources are connected, the user's meetings/messages are additional
+        action signals you may consult.
+
+        **GUARDRAIL — no new signal, no change.** If nothing meaningful happened since
+        the last run (empty query log, no new decision-bearing pages), report "no soul
+        update" and STOP. Don't manufacture introspection.
+
+        ### 2. Read the current soul
+
+        ```
+        vbrain query "<themes you expect>" --no-log --format json --soul-authoritative
+        ```
+
+        Inventory the existing core memories so you update instead of duplicating.
+
+        ### 3. Cross-reference (judgment — do NOT write yet)
+
+        For each recurring pattern in the actions, ask:
+
+        - WHAT does it reveal about how/why the user acts — a value, a decision rule, a
+          recurring preference?
+        - Is it already in the soul? → update. New and recurring? → create. Does it
+          contradict the soul? → resolve per Principle 2 before writing.
+        - Is it merely something the user KNOWS (a fact, a book read, a quote)? → it does
+          NOT belong in the soul. Leave it in the knowledge wiki.
+
+        ### 4. Consolidate into the soul
+
+        Build a `soul.json` (array of objects with `op` = create|update|delete, `slug`
+        for update/delete, `slug_hint`/`title` for create, `body_markdown`, `tags`) and
+        write through the only writer:
+
+        ```
+        vbrain soul-write --pages-json <soul.json>
+        ```
+
+        Each page documents, concisely: the situation, how the user acts, and WHY (the
+        grounding action). Merge related memories rather than spawning near-duplicates.
+        Use `op: "delete"` to prune stale beliefs (Principle 4). Keep it lean
+        (Principle 1).
+
+        ### 5. Reindex + commit (reversible)
+
+        ```
+        vbrain reindex
+        vbrain commit --message "soul: consolidate from recent actions"
+        ```
+
+        If the base has no git repo, `commit` is a no-op — just proceed.
+
+        ### 6. Report (self-contained markdown)
+
+        - Which action signals you consolidated.
+        - Soul pages created/updated/pruned (with slugs).
+        - Any contradiction you found and HOW you resolved it (changed-mind vs.
+          not-a-core-memory).
+        - If nothing was grounded enough to persist, say so plainly — don't fake
+          introspection (fail loud).
+      enabled: true
+    - slug: dream
+      description: 'Nightly self-improvement: reads the query_log and reorganizes the wiki to answer better.'
+      schedule: 0 3 * * *
+      next_run: "2026-06-02T03:00:00Z"
+      last_run: null
+      prompt: |
+        You are the vbrain wiki self-improvement routine ("dream"). Your job: look at
+        the queries that were made — and that search answered BADLY — and reorganize the
+        wiki so that next time the answer is good. You have full autonomy (create,
+        update, merge, even delete pages), BUT every change goes through the
+        deterministic path and is committed to the base's git (reversible). You NEVER
+        write loose markdown into wiki/.
+
+        ## Constants
+
+        - All commands are subcommands of the `vbrain` binary (on the PATH).
+        - The base (wiki/raw/db) lives in `$VBRAIN_HOME` or `~/vbrain` by default.
+
+        ## Steps
+
+        ### 1. Pull the query queue
+
+        ```
+        vbrain query-log --dump
+        ```
+
+        Save the returned `max_id`.
+
+        **GUARDRAIL — no question, no action**: if `count == 0`, there is **absolutely
+        nothing to do**. Report "no pending queries" and STOP immediately: don't probe
+        the wiki, don't run tags/query, don't write, don't reindex, don't commit, don't
+        prune. Dream exists only to answer real questions that were poorly served.
+
+        ### 2. Triage
+
+        Focus on entries with low `results_count` (0 to 2) — those are the ones search
+        answered badly. Group queries with similar intent. To understand the real
+        intent, use `source_query` (the original natural-language question) when
+        present; otherwise use `query`/`normalized`.
+
+        ### 3. Diagnosis (do NOT write anything yet)
+
+        For each poorly-served intent, investigate what already exists in the base:
+
+        ```
+        vbrain tags --limit 80
+        vbrain query "<terms you think should match>" --no-log --format json
+        ```
+
+        (Always use `--no-log` in this phase — you're probing, you must not pollute the
+        queue you're processing.) Classify the cause:
+
+        - **(a) scattered / no bridge**: the knowledge exists but in loose pages, with no
+          hub page, tag, or wikilink connecting them. → create a hub/tag/links.
+        - **(b) redundancy**: duplicate/competing pages diluting the ranking. → merge
+          into the canonical one and delete the redundant ones.
+        - **(c) real gap**: the knowledge is NOT in the base. → **don't make it up**;
+          record it as a gap in the report for the user to decide whether to ingest.
+
+        ### 4. Reorganize (only what's grounded in existing pages)
+
+        First record an audit raw of what you're going to do (keeps the invariant "every
+        page traces back to a raw"). Write a short markdown into a tmpfile documenting
+        the action and ingest it:
+
+        ```
+        vbrain ingest <tmpfile.md> --type text     # returns {"raw_id": N, ...}
+        ```
+
+        Build a `pages.json` (array of objects with `op`, `slug`, `title`, `kind`,
+        `tags`, `body_markdown`) and write **ALWAYS** through the deterministic writer —
+        it's the only way to write into the wiki. You **NEVER** write loose markdown into
+        `wiki/` nor use `rm`/`mv` by hand; `write-pages` stages everything in a temp dir
+        and only then applies it all at once (same process as add-knowledge):
+
+        ```
+        vbrain write-pages --raw-id <N> --pages-json <pages.json>
+        ```
+
+        - **Hub page (MOC)**: `op: "create"`, `kind: "note"`, body with `[[wikilinks]]`
+          to each related page + the tags/synonyms that were missing (e.g. if they
+          searched "jobs" and the pages only had `career`, add `jobs` as a tag/alias and
+          create a hub "Victor's Jobs").
+        - **Bridge on an existing page**: `op: "update"` on the slug — the writer unions
+          tags and merges frontmatter, so you can add a tag/wikilink without rewriting
+          the whole body.
+        - **Merge/delete** (cause b): merge the content into the canonical one via
+          `op: "update"` and remove the redundant one with `op: "delete"` (slug) **in the
+          same `write-pages` call**. Never `rm` directly.
+        - **HARD RULE**: never fabricate facts. A hub only links what already exists. A
+          gap (cause c) becomes a report item, not a content page.
+
+        **PROVENANCE GUARDRAIL (deterministic, enforced by write-pages)**: before
+        applying, the writer checks that no `raw` loses all of its citations
+        (`source_raw`). If your reorg would orphan a raw, it **aborts without touching
+        the wiki** and returns `{"committed": false, "needs_review": true,
+        "orphaned_raws": [...]}`. When that happens: **don't try to bypass it**. Replan
+        so each raw in `orphaned_raws` stays cited — typically by having the canonical
+        (merge) page or the hub cite those raws — and run `write-pages` again. Only
+        proceed to reindex when `committed: true`.
+
+        ### 5. Reindex
+
+        ```
+        vbrain reindex
+        ```
+
+        ### 6. Commit (reversible)
+
+        ```
+        vbrain commit --message "dream: reorg from N queries (hubs/tags/merges)"
+        ```
+
+        If the base has no git repo, `commit` is a no-op — just proceed.
+
+        ### 7. Drain the queue you processed
+
+        ```
+        vbrain query-log --prune --through-id <max_id from step 1>
+        ```
+
+        Deletes only `id <= max_id`: queries that arrived during your run have a higher
+        id and survive for the next dream.
+
+        ### 8. Report (self-contained markdown)
+
+        - How many queries analyzed, how many were poorly served.
+        - What you did: hubs created, tags/links added, merges/deletes (with the slugs).
+        - **Gaps**: queries asking for something not in the base — list them for the
+          user to decide whether to ingest via `/vbrain-add-knowledge`.
+        - Commit hash, if any.
+        - If you could NOT improve anything in a grounded way, **say so explicitly** —
+          don't fake success (fail loud).
+      enabled: true
