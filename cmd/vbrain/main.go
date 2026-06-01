@@ -776,8 +776,17 @@ func cmdInstall(args []string) error {
 		out["global_skills_installed"] = n
 	}
 
-	// 3. interactive onboarding (git identity + GitHub) when on a terminal
-	if !*noPrompt {
+	// An already-initialized base means this is an update, not a first install:
+	// refresh the binary + skills and push to the existing remote, but skip the
+	// GitHub onboarding (visibility/PAT) — the base is already wired.
+	existing := git.RepoInitialized(paths.DataHome())
+	if existing {
+		out["mode"] = "update"
+		fmt.Fprintf(os.Stderr, "→ existing base at %s — refreshing assets (skipping onboarding)\n", paths.DataHome())
+	}
+
+	// 3. interactive onboarding (git identity + GitHub) — only for a fresh base
+	if !*noPrompt && !existing {
 		onboard(github, repoName, token)
 	}
 
@@ -859,8 +868,11 @@ func bootstrapBase(out map[string]any, github, repoName, token string) error {
 		return err
 	}
 
-	if github != "none" && github != "" {
-		if token == "" {
+	// Create the repo only for a fresh base that asked for GitHub and has no
+	// remote yet. The gh CLI / system git credentials are preferred; a PAT is
+	// only the fallback when neither is available.
+	if github != "none" && github != "" && !git.HasRemote(dataHome, "origin") {
+		if token == "" && !ghAvailable() {
 			out["needs_token"] = true
 			out["github"] = github
 			return nil
@@ -869,17 +881,23 @@ func bootstrapBase(out map[string]any, github, repoName, token string) error {
 		if err != nil {
 			return err
 		}
-		if !git.HasRemote(dataHome, "origin") {
-			if err := git.AddRemote(url, dataHome, "origin"); err != nil {
-				return err
-			}
-		}
-		os.Setenv("GITHUB_TOKEN", token) // go-git push uses the PAT
-		if _, err := git.Push(dataHome, "origin", ""); err != nil {
+		if err := git.AddRemote(url, dataHome, "origin"); err != nil {
 			return err
 		}
 		out["remote_url"] = url
-		out["pushed"] = true
+	}
+
+	// Push whenever a remote exists — the system git uses SSH / the credential
+	// helper (no PAT); go-git falls back to GITHUB_TOKEN when one is set.
+	if git.HasRemote(dataHome, "origin") {
+		if token != "" {
+			os.Setenv("GITHUB_TOKEN", token) // go-git push uses the PAT
+		}
+		res, err := git.Push(dataHome, "origin", "")
+		if err != nil {
+			return err
+		}
+		out["pushed"] = res.Pushed
 	}
 	return nil
 }
@@ -956,7 +974,10 @@ func onboard(github, repoName, token *string) {
 			*github = "private"
 		}
 	}
-	if *github != "none" && *token == "" {
+	// A PAT is only needed when the gh CLI isn't there to create the repo and
+	// the system git can't push with the user's own credentials. With gh
+	// authenticated, skip the prompt entirely.
+	if *github != "none" && *token == "" && !ghAvailable() {
 		fmt.Fprintln(os.Stderr, "Create a PAT (scope 'repo'): https://github.com/settings/tokens/new?scopes=repo&description=vbrain")
 		*token = prompt("Paste the PAT (empty skips GitHub): ")
 		if *token == "" {
@@ -997,9 +1018,51 @@ func isTerminal() bool {
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
-// createGitHubRepo creates a repo via the GitHub REST API using the PAT, and
-// returns the HTTPS clone URL. Idempotent-ish: treats 422 (already exists) as ok.
+// ghAvailable reports whether the gh CLI is installed and authenticated, so
+// repos can be created and pushed without asking for a PAT.
+func ghAvailable() bool {
+	if _, err := exec.LookPath("gh"); err != nil {
+		return false
+	}
+	return exec.Command("gh", "auth", "status").Run() == nil
+}
+
+// ghRepoURL creates (or finds, if it already exists) the GitHub repo for the
+// authenticated user via the gh CLI and returns its SSH clone URL. ok=false when
+// gh is unavailable/unauthenticated, so callers fall back to the PAT REST path.
+// A var so tests can stub it without shelling out.
+var ghRepoURL = func(name string, private bool) (string, bool) {
+	if !ghAvailable() {
+		return "", false
+	}
+	sshURL := func() (string, bool) {
+		out, err := exec.Command("gh", "repo", "view", name, "--json", "sshUrl", "-q", ".sshUrl").Output()
+		if err != nil {
+			return "", false
+		}
+		u := strings.TrimSpace(string(out))
+		return u, u != ""
+	}
+	if u, ok := sshURL(); ok { // already exists — idempotent
+		return u, true
+	}
+	vis := "--public"
+	if private {
+		vis = "--private"
+	}
+	if err := exec.Command("gh", "repo", "create", name, vis).Run(); err != nil {
+		return "", false
+	}
+	return sshURL()
+}
+
+// createGitHubRepo creates a repo and returns its clone URL. It prefers the gh
+// CLI (no PAT needed); otherwise it falls back to the GitHub REST API with the
+// PAT. Idempotent-ish: treats 422 (already exists) as ok.
 func createGitHubRepo(name string, private bool, token string) (string, error) {
+	if url, ok := ghRepoURL(name, private); ok {
+		return url, nil
+	}
 	body, _ := json.Marshal(map[string]any{"name": name, "private": private})
 	req, err := http.NewRequest(http.MethodPost, "https://api.github.com/user/repos", bytes.NewReader(body))
 	if err != nil {
