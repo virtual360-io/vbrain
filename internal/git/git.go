@@ -93,7 +93,12 @@ func PullRebase(dir, remote, branch string) error {
 	if branch == "" {
 		branch = CurrentBranch(dir)
 	}
-	_, err := sysRun(dir, "git", "pull", "--rebase", remote, branch)
+	// The rebase rewrites commits, so it needs an identity — inject the vbrain
+	// fallback when none is configured (CI / cloud / --no-prompt install),
+	// mirroring commitArgs.
+	args := append([]string{"git"}, identityArgs(dir)...)
+	args = append(args, "pull", "--rebase", remote, branch)
+	_, err := sysRun(dir, args...)
 	return err
 }
 

@@ -172,6 +172,17 @@ func run(t *testing.T, dir string, args ...string) {
 // integrates the remote's commit so the retried push fast-forwards. This is the
 // case `vbrain install` hits when the base moved on another machine / the cloud.
 func TestPullRebaseLetsAStaleClonePush(t *testing.T) {
+	// Isolate git identity: useConfigOnly + no configured name/email reproduces
+	// CI / the cloud, where the rebase fails with "Committer identity unknown"
+	// unless PullRebase injects the vbrain fallback. Without this, the test would
+	// pass on any dev machine that happens to have a global identity.
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(cfg, []byte("[user]\n\tuseConfigOnly = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+
 	remote := t.TempDir()
 	run(t, remote, "init", "--bare", "-b", "main", remote)
 

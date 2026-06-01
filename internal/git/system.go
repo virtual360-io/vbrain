@@ -71,11 +71,20 @@ func (systemBackend) AddRemote(url, dir, name string) error {
 // vbrain fallback author (mirrors the go-git backend) — without overwriting the
 // real one.
 func commitArgs(dir, message string) []string {
-	args := []string{"git", "-c", "commit.gpgsign=false"}
-	if !configSet(dir, "user.name") || !configSet(dir, "user.email") {
-		args = append(args, "-c", "user.name=vbrain", "-c", "user.email=vbrain@localhost")
-	}
+	args := append([]string{"git", "-c", "commit.gpgsign=false"}, identityArgs(dir)...)
 	return append(args, "commit", "-m", message)
+}
+
+// identityArgs returns `-c user.name=… -c user.email=…` when the repo has no
+// configured identity, so operations that write commits (commit, rebase) don't
+// fail with "Committer identity unknown" on a machine without git identity
+// (CI, the cloud, a --no-prompt install). Empty when an identity is set, so the
+// real one is never overwritten.
+func identityArgs(dir string) []string {
+	if configSet(dir, "user.name") && configSet(dir, "user.email") {
+		return nil
+	}
+	return []string{"-c", "user.name=vbrain", "-c", "user.email=vbrain@localhost"}
 }
 
 func configSet(dir, key string) bool {
