@@ -237,9 +237,9 @@ Invoke-WebRequest -Uri https://github.com/virtual360-io/vbrain/releases/latest/d
 vbrain update           # downloads the latest release binary (verifies SHA256)
 ```
 
-If you installed via Homebrew, use `brew upgrade vbrain` instead — it keeps the
-brew-managed binary and the formula in sync (`vbrain update` would replace it
-out-of-band).
+`vbrain update` is safe on a Homebrew install too: it detects the binary lives
+in a Cellar and delegates to `brew upgrade vbrain`, so the keg stays in sync
+instead of being replaced out-of-band.
 
 ## Tests
 

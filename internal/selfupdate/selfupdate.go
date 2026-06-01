@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -29,6 +30,7 @@ type Result struct {
 	Path    string `json:"path"`
 	SHA256  string `json:"sha256"`
 	Updated bool   `json:"updated"`
+	Method  string `json:"method"` // "download" or "homebrew"
 }
 
 // AssetName returns the release binary name for the current platform (e.g.
@@ -70,7 +72,37 @@ func Run() (Result, error) {
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}
-	return update(exe, DefaultBaseURL, &http.Client{Timeout: 60 * time.Second})
+	return run(exe, DefaultBaseURL, &http.Client{Timeout: 60 * time.Second})
+}
+
+// run routes the update: a Homebrew-managed binary (inside a Cellar) is updated
+// through `brew upgrade` so the keg stays consistent; everything else downloads
+// and swaps the binary in place.
+func run(exe, baseURL string, client *http.Client) (Result, error) {
+	if brewManaged(exe) {
+		return brewUpgrade()
+	}
+	return update(exe, baseURL, client)
+}
+
+// brewManaged reports whether the binary lives inside a Homebrew/Linuxbrew
+// Cellar — in which case self-replacing it would desync the keg from what brew
+// recorded, so the update must go through `brew upgrade`.
+func brewManaged(path string) bool {
+	sep := string(filepath.Separator)
+	return strings.Contains(path, sep+"Cellar"+sep)
+}
+
+// brewUpgrade delegates the update to Homebrew. A var so tests can stub it
+// without invoking brew.
+var brewUpgrade = func() (Result, error) {
+	cmd := exec.Command("brew", "upgrade", "vbrain")
+	cmd.Stdout = os.Stderr // brew's progress is human-facing; stdout stays JSON
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return Result{}, fmt.Errorf("brew upgrade vbrain: %w", err)
+	}
+	return Result{Asset: AssetName(), Method: "homebrew", Updated: true}, nil
 }
 
 // update downloads AssetName() from baseURL, checks the SHA256 (from
@@ -97,7 +129,7 @@ func update(targetPath, baseURL string, client *http.Client) (Result, error) {
 	if err := replaceBinary(targetPath, data); err != nil {
 		return Result{}, err
 	}
-	return Result{Asset: asset, Path: targetPath, SHA256: got, Updated: true}, nil
+	return Result{Asset: asset, Path: targetPath, SHA256: got, Updated: true, Method: "download"}, nil
 }
 
 // wantedSHA fetches SHA256SUMS and extracts the asset's hash.

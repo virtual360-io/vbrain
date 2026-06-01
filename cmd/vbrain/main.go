@@ -820,7 +820,11 @@ func cmdUpdate(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "updated: %s → %s\n", res.Asset, res.Path)
+	if res.Method == "homebrew" {
+		fmt.Fprintln(os.Stderr, "updated via Homebrew (brew upgrade vbrain)")
+	} else {
+		fmt.Fprintf(os.Stderr, "updated: %s → %s\n", res.Asset, res.Path)
+	}
 	return emitJSON(res)
 }
 

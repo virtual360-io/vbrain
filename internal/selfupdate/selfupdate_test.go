@@ -45,6 +45,46 @@ func TestAssetName(t *testing.T) {
 	}
 }
 
+// A binary inside a Homebrew Cellar must be recognized so `vbrain update`
+// delegates to brew instead of clobbering the keg.
+func TestBrewManaged(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/opt/homebrew/Cellar/vbrain/0.1.10/bin/vbrain", true},
+		{"/home/linuxbrew/.linuxbrew/Cellar/vbrain/0.1.10/bin/vbrain", true},
+		{"/usr/local/Cellar/vbrain/0.1.10/bin/vbrain", true},
+		{"/Users/me/.local/bin/vbrain", false},
+		{"/opt/homebrew/bin/vbrain", false}, // the symlink, not the keg
+	}
+	for _, c := range cases {
+		if got := brewManaged(c.path); got != c.want {
+			t.Errorf("brewManaged(%q) = %v, want %v", c.path, got, c.want)
+		}
+	}
+}
+
+// A Homebrew-managed binary routes to brewUpgrade (no download, no network).
+func TestRunDelegatesToBrewWhenManaged(t *testing.T) {
+	orig := brewUpgrade
+	t.Cleanup(func() { brewUpgrade = orig })
+	called := false
+	brewUpgrade = func() (Result, error) {
+		called = true
+		return Result{Asset: AssetName(), Method: "homebrew", Updated: true}, nil
+	}
+
+	// nil client + empty URL: if it tried to download, it would panic/error.
+	res, err := run("/opt/homebrew/Cellar/vbrain/0.1.10/bin/vbrain", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !called || res.Method != "homebrew" {
+		t.Fatalf("expected brew delegation, called=%v res=%+v", called, res)
+	}
+}
+
 func TestUpdateReplacesBinaryOnMatchingSha(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "vbrain")
 	os.WriteFile(target, []byte("versão antiga"), 0o755)
