@@ -37,10 +37,18 @@ func DataHome() string {
 }
 
 // IsBase reports whether dir is a vbrain base (it carries wiki/, the source of
-// truth).
+// truth). The vbrain source checkout also carries a wiki/, but it is NOT a base:
+// it has the Go module. Treating it as the base would bootstrap base assets into
+// the source tree and push them to the code remote, so go.mod disqualifies it.
 func IsBase(dir string) bool {
 	fi, err := os.Stat(filepath.Join(dir, "wiki"))
-	return err == nil && fi.IsDir()
+	if err != nil || !fi.IsDir() {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+		return false
+	}
+	return true
 }
 
 func RawDir() string  { return filepath.Join(DataHome(), "raw") }

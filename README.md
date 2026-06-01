@@ -75,7 +75,8 @@ JSON on stdout (read by the skills), human-readable text on stderr. Subcommands:
 | `vbrain realtime <gcalendar\|gmail\|slack> --json …` | connect a realtime source |
 | `vbrain tags` / `vbrain stats` / `vbrain query-log` | insights/maintenance |
 | `vbrain install` / `vbrain setup` / `vbrain seed-routines` | base bootstrap |
-| `vbrain update` | self-update from the latest release |
+| `vbrain update` | self-update from the latest release (delegates to brew on a Homebrew install) |
+| `vbrain version` (`--version`/`-v`) | print the binary's version |
 
 ### Skills (Claude Code interface)
 

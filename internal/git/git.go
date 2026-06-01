@@ -10,6 +10,7 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -80,6 +81,21 @@ func Push(dir, name, branch string) (PushResult, error) { return selected().Push
 
 // AddRemote adds a named remote.
 func AddRemote(url, dir, name string) error { return selected().AddRemote(url, dir, name) }
+
+// PullRebase integrates remote changes by rebasing the local branch on top of
+// the remote's, so a subsequent push fast-forwards. It needs the system git
+// (go-git has no rebase); without it, it returns an error and the caller keeps
+// the original push rejection.
+func PullRebase(dir, remote, branch string) error {
+	if !systemGitAvailable() {
+		return errors.New("pull --rebase requires the system git")
+	}
+	if branch == "" {
+		branch = CurrentBranch(dir)
+	}
+	_, err := sysRun(dir, "git", "pull", "--rebase", remote, branch)
+	return err
+}
 
 // --- read operations (backend-agnostic, via go-git) ---
 

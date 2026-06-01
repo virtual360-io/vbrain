@@ -40,6 +40,28 @@ func TestDataHomeUsesLocalBaseWhenEnvBlankAndRunningInBase(t *testing.T) {
 	}
 }
 
+func TestSourceCheckoutIsNotABase(t *testing.T) {
+	// A dir with wiki/ but also a go.mod is the vbrain source checkout, not a
+	// base — otherwise `vbrain install` would bootstrap base assets into the
+	// source tree and push them to the code remote.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "wiki"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if IsBase(dir) {
+		t.Fatal("source checkout (wiki/ + go.mod) must not be treated as a base")
+	}
+	t.Chdir(dir)
+	t.Setenv("VBRAIN_HOME", "")
+	home, _ := os.UserHomeDir()
+	if got, want := DataHome(), filepath.Join(home, "vbrain"); got != want {
+		t.Fatalf("inside source checkout: DataHome() = %q, want %q", got, want)
+	}
+}
+
 func TestDerivedPathsAreUnderDataHome(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("VBRAIN_HOME", dir)

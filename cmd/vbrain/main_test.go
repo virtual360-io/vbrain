@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/virtual360-io/vbrain/internal/git"
@@ -98,5 +99,24 @@ func TestBootstrapPushesToExistingRemoteWithoutToken(t *testing.T) {
 	// the bare remote actually received main
 	if o, err := exec.Command("git", "-C", remote, "rev-parse", "main").CombinedOutput(); err != nil {
 		t.Fatalf("remote did not receive main: %v: %s", err, o)
+	}
+}
+
+// `vbrain version` / `--version` / `-v` print the injected version. Built as a
+// subprocess because main() calls os.Exit; ldflags proves the injection seam.
+func TestVersionFlag(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "vbrain")
+	build := exec.Command("go", "build", "-ldflags", "-X main.version=v9.9.9", "-o", bin, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v: %s", err, out)
+	}
+	for _, flag := range []string{"version", "--version", "-v"} {
+		out, err := exec.Command(bin, flag).Output()
+		if err != nil {
+			t.Fatalf("vbrain %s: %v", flag, err)
+		}
+		if got := strings.TrimSpace(string(out)); got != "v9.9.9" {
+			t.Errorf("vbrain %s = %q, want v9.9.9", flag, got)
+		}
 	}
 }

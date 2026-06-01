@@ -36,13 +36,20 @@ import (
 	"github.com/virtual360-io/vbrain/internal/writepages"
 )
 
+// version is the binary's release version, injected at build time via
+// -ldflags "-X main.version=...". It's "dev" for local builds.
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: vbrain <reindex|query|ingest|write-pages|soul-write|resolve-links|commit|routines|realtime|install|update> [args]")
+		fmt.Fprintln(os.Stderr, "usage: vbrain <reindex|query|ingest|write-pages|soul-write|resolve-links|commit|routines|realtime|install|update|version> [args]")
 		os.Exit(2)
 	}
 	var err error
 	switch os.Args[1] {
+	case "version", "--version", "-v":
+		fmt.Println(version)
+		return
 	case "reindex":
 		err = cmdReindex(os.Args[2:])
 	case "query":
@@ -899,7 +906,14 @@ func bootstrapBase(out map[string]any, github, repoName, token string) error {
 		}
 		res, err := git.Push(dataHome, "origin", "")
 		if err != nil {
-			return err
+			// Likely non-fast-forward: the remote moved (another machine / the
+			// cloud pushed). Rebase on top and retry once before giving up.
+			if rebaseErr := git.PullRebase(dataHome, "origin", ""); rebaseErr == nil {
+				res, err = git.Push(dataHome, "origin", "")
+			}
+			if err != nil {
+				return err
+			}
 		}
 		out["pushed"] = res.Pushed
 	}

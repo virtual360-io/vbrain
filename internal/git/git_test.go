@@ -154,3 +154,62 @@ func TestGitignoreIdempotent(t *testing.T) {
 		t.Error("should not rewrite an existing .gitignore")
 	}
 }
+
+// run is a tiny helper for arranging git state in tests.
+func run(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+	}
+}
+
+// A push that's rejected non-fast-forward must be recoverable: PullRebase
+// integrates the remote's commit so the retried push fast-forwards. This is the
+// case `vbrain install` hits when the base moved on another machine / the cloud.
+func TestPullRebaseLetsAStaleClonePush(t *testing.T) {
+	remote := t.TempDir()
+	run(t, remote, "init", "--bare", "-b", "main", remote)
+
+	// clone A seeds the remote
+	a := t.TempDir()
+	run(t, a, "clone", remote, a)
+	os.WriteFile(filepath.Join(a, "x"), []byte("1"), 0o644)
+	run(t, a, "add", "x")
+	run(t, a, "commit", "-m", "x")
+	run(t, a, "push", "origin", "main")
+
+	// clone B starts level with the remote
+	b := t.TempDir()
+	run(t, b, "clone", remote, b)
+
+	// A advances the remote
+	os.WriteFile(filepath.Join(a, "y"), []byte("2"), 0o644)
+	run(t, a, "add", "y")
+	run(t, a, "commit", "-m", "y")
+	run(t, a, "push", "origin", "main")
+
+	// B commits on the old tip → its push is rejected (non-fast-forward)
+	os.WriteFile(filepath.Join(b, "z"), []byte("3"), 0o644)
+	run(t, b, "add", "z")
+	run(t, b, "commit", "-m", "z")
+	if _, err := git.Push(b, "origin", "main"); err == nil {
+		t.Fatal("expected the stale push to be rejected")
+	}
+
+	// PullRebase + retry must succeed
+	if err := git.PullRebase(b, "origin", "main"); err != nil {
+		t.Fatalf("pull --rebase: %v", err)
+	}
+	if _, err := git.Push(b, "origin", "main"); err != nil {
+		t.Fatalf("push after rebase: %v", err)
+	}
+	// the remote now carries z on top of y
+	if log := gitLog(t, b); !strings.Contains(log, "z") || !strings.Contains(log, "y") {
+		t.Fatalf("expected y and z in history, got:\n%s", log)
+	}
+}
