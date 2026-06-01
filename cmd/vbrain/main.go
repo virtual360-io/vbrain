@@ -80,14 +80,10 @@ func main() {
 		err = cmdRoutineAdd(os.Args[2:])
 	case "routine-list":
 		err = cmdRoutineList(os.Args[2:])
-	case "seed-routines":
-		err = cmdSeedRoutines(os.Args[2:])
-	case "install":
+	case "install", "update":
 		err = cmdInstall(os.Args[2:])
-	case "setup":
-		err = cmdSetup(os.Args[2:])
-	case "update":
-		err = cmdUpdate(os.Args[2:])
+	case "__bootstrap": // internal: re-exec'd by install/update on the freshly-installed binary
+		err = cmdBootstrap(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %q\n", os.Args[1])
 		os.Exit(2)
@@ -727,26 +723,20 @@ func cmdRoutineList(args []string) error {
 	})
 }
 
-func cmdSeedRoutines(args []string) error {
-	fs := flag.NewFlagSet("seed-routines", flag.ContinueOnError)
-	dryRun := fs.Bool("dry-run", false, "don't write, just report")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	res, err := routines.SeedDefaults(*dryRun, time.Now())
-	if err != nil {
-		return err
-	}
-	return emitJSON(map[string]any{
-		"config_path": routines.ConfigPath(),
-		"seeded":      res.Seeded, "skipped": res.Skipped, "dry_run": *dryRun,
-	})
-}
-
-// cmdInstall is the entry point after downloading the binary from the release:
-// installs the binary itself onto the PATH, installs the embedded skills
-// globally, and bootstraps the base (= setup), with interactive GitHub
-// onboarding when on a terminal. Replaces the old install.sh.
+// cmdInstall installs/updates vbrain and syncs the assets. `vbrain install` and
+// `vbrain update` are aliases for it — the verb doesn't change what it does; one
+// signal does: has this base been bootstrapped before?
+//
+//   - Fresh base (first-time setup): the binary in hand — just placed by curl,
+//     brew, or a manual copy — IS the target, so put it on the PATH (no-op if
+//     already there) and sync in-process. No network, no redundant brew upgrade.
+//   - Existing base (an update): fetch the latest release (or `brew upgrade`),
+//     swap it, then re-exec THAT binary for the asset sync so the skills and
+//     routine seed come from its embed — not this older process. (That re-exec
+//     is why a new release's default routines/skills finally land on update,
+//     instead of just the binary.)
+//
+// Replaces the old install.sh and the separate `setup`/`update` subcommands.
 func cmdInstall(args []string) error {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	binDir := fs.String("bin-dir", defaultBinDir(), "PATH directory for the binary")
@@ -760,17 +750,63 @@ func cmdInstall(args []string) error {
 
 	out := map[string]any{}
 
-	// 1. binary onto PATH
-	binPath, onPath, err := installSelf(*binDir)
-	if err != nil {
-		return err
-	}
-	out["binary"] = binPath
-	if !onPath {
-		fmt.Fprintf(os.Stderr, "→ add to PATH: export PATH=\"%s:$PATH\"\n", filepath.Dir(binPath))
+	syncBin := "" // re-exec this for the asset sync; "" = run in-process
+	if git.RepoInitialized(paths.DataHome()) {
+		// Update: fetch the latest binary and re-exec IT for the asset sync.
+		out["mode"] = "update"
+		fmt.Fprintf(os.Stderr, "→ existing base at %s — updating and refreshing assets\n", paths.DataHome())
+		res, err := selfupdate.Run()
+		if err != nil {
+			return err
+		}
+		out["update"] = res
+		if res.Method == "homebrew" {
+			fmt.Fprintln(os.Stderr, "→ updated via Homebrew")
+			if p, err := exec.LookPath("vbrain"); err == nil {
+				syncBin = p // brew relinked the new keg onto the PATH
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "→ updated binary: %s\n", res.Path)
+			syncBin = res.Path // download: swapped at this path
+		}
+	} else {
+		// Fresh setup: the running binary is the target. Put it on the PATH
+		// (no-op when it already runs from there — brew, or curl into a PATH dir)
+		// and sync in-process; no network.
+		binPath, onPath, err := installSelf(*binDir)
+		if err != nil {
+			return err
+		}
+		out["binary"] = binPath
+		if !onPath {
+			fmt.Fprintf(os.Stderr, "→ add to PATH: export PATH=\"%s:$PATH\"\n", filepath.Dir(binPath))
+		}
+		if !*noPrompt {
+			onboard(github, repoName, token)
+		}
 	}
 
-	// 2. global skills (~/.claude/skills) from the embed
+	// Sync assets: re-exec the freshly-installed binary on the update path, else
+	// in-process (fresh setup — this process already is the target version).
+	if syncBin != "" {
+		bres, err := reexecBootstrap(syncBin, *github, *repoName, *token)
+		if err != nil {
+			return err
+		}
+		for k, v := range bres {
+			out[k] = v
+		}
+	} else if err := syncAssets(out, *github, *repoName, *token); err != nil {
+		return err
+	}
+	return emitJSON(out)
+}
+
+// syncAssets installs the embedded skills globally (~/.claude/skills) and
+// bootstraps the base. Shared by the in-process fresh install and the re-exec'd
+// __bootstrap (update path) so both pull skills and routine defaults from the
+// running binary's embed — never a stale, already-running older process.
+func syncAssets(out map[string]any, github, repoName, token string) error {
 	skills, err := embeddedSkills()
 	if err != nil {
 		return err
@@ -782,32 +818,41 @@ func cmdInstall(args []string) error {
 		}
 		out["global_skills_installed"] = n
 	}
-
-	// An already-initialized base means this is an update, not a first install:
-	// refresh the binary + skills and push to the existing remote, but skip the
-	// GitHub onboarding (visibility/PAT) — the base is already wired.
-	existing := git.RepoInitialized(paths.DataHome())
-	if existing {
-		out["mode"] = "update"
-		fmt.Fprintf(os.Stderr, "→ existing base at %s — refreshing assets (skipping onboarding)\n", paths.DataHome())
-	}
-
-	// 3. interactive onboarding (git identity + GitHub) — only for a fresh base
-	if !*noPrompt && !existing {
-		onboard(github, repoName, token)
-	}
-
-	// 4. bootstrap the base
-	if err := bootstrapBase(out, *github, *repoName, *token); err != nil {
-		return err
-	}
-	return emitJSON(out)
+	return bootstrapBase(out, github, repoName, token)
 }
 
-// cmdSetup bootstraps only the base (dirs, CLAUDE.md, skills, git init, routine
-// seeding, optional GitHub). Reusable; `vbrain install` wraps it.
-func cmdSetup(args []string) error {
-	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+// reexecBootstrap runs the freshly-installed binary's hidden __bootstrap so the
+// assets are synced from THAT version's embed, not this older running process.
+// It returns the subprocess's JSON so the caller folds it into a single stdout
+// object (the skills read one JSON blob).
+func reexecBootstrap(bin, github, repoName, token string) (map[string]any, error) {
+	cmdArgs := []string{"__bootstrap", "--github", github, "--repo-name", repoName}
+	if token != "" {
+		cmdArgs = append(cmdArgs, "--token", token)
+	}
+	c := exec.Command(bin, cmdArgs...)
+	c.Stdin = os.Stdin
+	c.Stderr = os.Stderr
+	var stdout bytes.Buffer
+	c.Stdout = &stdout
+	if err := c.Run(); err != nil {
+		return nil, err
+	}
+	var res map[string]any
+	if stdout.Len() > 0 {
+		if err := json.Unmarshal(stdout.Bytes(), &res); err != nil {
+			return nil, fmt.Errorf("bootstrap returned non-JSON on stdout: %w", err)
+		}
+	}
+	return res, nil
+}
+
+// cmdBootstrap syncs the assets only (global skills, base scaffold, CLAUDE.md,
+// git init, routine seeding, commit, optional GitHub). NOT a public subcommand:
+// install and update re-exec it as __bootstrap on the freshly-installed binary,
+// so the skills and routine seed come from that binary's embed.
+func cmdBootstrap(args []string) error {
+	fs := flag.NewFlagSet("__bootstrap", flag.ContinueOnError)
 	github := fs.String("github", "none", "private|public|none")
 	repoName := fs.String("repo-name", "vbrain", "GitHub repo name")
 	token := fs.String("token", os.Getenv("GITHUB_TOKEN"), "GitHub PAT (or env GITHUB_TOKEN)")
@@ -815,24 +860,10 @@ func cmdSetup(args []string) error {
 		return err
 	}
 	out := map[string]any{}
-	if err := bootstrapBase(out, *github, *repoName, *token); err != nil {
+	if err := syncAssets(out, *github, *repoName, *token); err != nil {
 		return err
 	}
 	return emitJSON(out)
-}
-
-// cmdUpdate self-updates the binary from the rolling latest release.
-func cmdUpdate(args []string) error {
-	res, err := selfupdate.Run()
-	if err != nil {
-		return err
-	}
-	if res.Method == "homebrew" {
-		fmt.Fprintln(os.Stderr, "updated via Homebrew (brew update && brew upgrade vbrain)")
-	} else {
-		fmt.Fprintf(os.Stderr, "updated: %s → %s\n", res.Asset, res.Path)
-	}
-	return emitJSON(res)
 }
 
 // embeddedSkills returns the FS of the embedded skills, rooted at .claude/skills.

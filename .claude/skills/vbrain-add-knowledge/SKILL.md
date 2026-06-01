@@ -45,9 +45,9 @@ test -d ~/vbrain/.git && echo present || echo absent
 
 Depending on the answer, run:
 
-- Private: `vbrain setup --github private`
-- Public: `vbrain setup --github public`
-- Local: `vbrain setup`
+- Private: `vbrain __bootstrap --github private`
+- Public: `vbrain __bootstrap --github public`
+- Local: `vbrain __bootstrap`
 - Skip: don't run anything, and note mentally that step 6 should be skipped.
 
 Parse the JSON:
@@ -56,8 +56,8 @@ Parse the JSON:
 - `{"initialized":false,"reason":"already a repo"}` → idempotent, proceed.
 - `{"needs_token":true}` → no GitHub PAT available. Use `AskUserQuestion` to ask
   whether the user wants to provide a PAT (scope `repo`). If yes, re-run
-  `vbrain setup --github <vis> --token <PAT>`. If no, fall back to "Local git
-  only" (`vbrain setup` without `--github`).
+  `vbrain __bootstrap --github <vis> --token <PAT>`. If no, fall back to "Local git
+  only" (`vbrain __bootstrap` without `--github`).
 
 **If present**: go straight to step 1.
 

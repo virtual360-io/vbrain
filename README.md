@@ -34,7 +34,7 @@ The base is resolved in this order: (1) `VBRAIN_HOME`, if set; (2) otherwise, if
 the current directory is a base (it carries `wiki/`, as in the cloud where repo
 == base), use it — so skills/sub-agents find the data without inheriting
 `VBRAIN_HOME` from the shell; (3) otherwise, `~/vbrain`. The wiki becomes a
-separate git repo during `vbrain install`/`setup` — private, public, or
+separate git repo during `vbrain install` — private, public, or
 local-only depending on the user's choice.
 
 ### Base layout (`~/vbrain/`)
@@ -74,8 +74,7 @@ JSON on stdout (read by the skills), human-readable text on stderr. Subcommands:
 | `vbrain routines [--dry-run]` / `vbrain routine-add` / `vbrain routine-list` | scheduling (cron) |
 | `vbrain realtime <gcalendar\|gmail\|slack> --json …` | connect a realtime source |
 | `vbrain tags` / `vbrain stats` / `vbrain query-log` | insights/maintenance |
-| `vbrain install` / `vbrain setup` / `vbrain seed-routines` | base bootstrap |
-| `vbrain update` | self-update from the latest release (delegates to brew on a Homebrew install) |
+| `vbrain install` / `vbrain update` | install or update the binary, then sync skills + base + routines — aliases, brew-aware |
 | `vbrain version` (`--version`/`-v`) | print the binary's version |
 
 ### Skills (Claude Code interface)
@@ -234,8 +233,14 @@ Invoke-WebRequest -Uri https://github.com/virtual360-io/vbrain/releases/latest/d
 
 ### Update
 
+`vbrain update` and `vbrain install` are aliases — the same command. On a binary
+already on the PATH it fetches the latest release (verifying SHA256) and swaps
+it, then re-runs the freshly-installed binary to sync the assets (skills + base
+scaffold + routine seed). That last step is why an updated base actually gets a
+new release's skills and default routines, instead of just a new binary.
+
 ```bash
-vbrain update           # downloads the latest release binary (verifies SHA256)
+vbrain update           # = vbrain install: update the binary, then sync assets
 ```
 
 `vbrain update` is safe on a Homebrew install too: it detects the binary lives

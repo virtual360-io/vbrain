@@ -120,3 +120,41 @@ func TestVersionFlag(t *testing.T) {
 		}
 	}
 }
+
+// `vbrain update` must do more than swap the binary: it has to sync the base
+// from the NEW binary's embed and seed that version's default routines —
+// otherwise a freshly-added default (e.g. the `soul` routine) never lands on an
+// updated base, which is the bug that motivated unifying install/update.
+// cmdInstall closes that gap by re-exec'ing the freshly-installed binary's
+// hidden __bootstrap; this exercises that hop against a real build and asserts
+// the seed actually reaches the base.
+func TestReexecBootstrapSeedsDefaultRoutines(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "vbrain")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v: %s", err, out)
+	}
+
+	// Build with the real env (warm cache), then sandbox HOME (global skills land
+	// in ~/.claude/skills) and VBRAIN_HOME (the base) so neither touches the
+	// developer's real files. The child re-exec inherits both.
+	home, base := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("VBRAIN_HOME", base)
+
+	out, err := reexecBootstrap(bin, "none", "vbrain", "")
+	if err != nil {
+		t.Fatalf("reexecBootstrap: %v", err)
+	}
+	if seeded, _ := out["seeded_routines"].([]any); len(seeded) == 0 {
+		t.Fatalf("__bootstrap seeded no routines; out=%v", out)
+	}
+	data, err := os.ReadFile(filepath.Join(base, "config", "routines", "routines.yml"))
+	if err != nil {
+		t.Fatalf("routines.yml not written by __bootstrap: %v", err)
+	}
+	for _, slug := range []string{"soul", "dream"} {
+		if !strings.Contains(string(data), "slug: "+slug) {
+			t.Errorf("default routine %q not seeded into the updated base", slug)
+		}
+	}
+}
