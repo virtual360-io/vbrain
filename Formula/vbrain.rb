@@ -2,27 +2,27 @@
 class Vbrain < Formula
   desc "Personal knowledge base — Claude Code skills + Go binary + SQLite FTS5"
   homepage "https://github.com/virtual360-io/vbrain"
-  version "0.1.16"
+  version "0.1.17"
 
   on_macos do
     on_arm do
-      url "https://github.com/virtual360-io/vbrain/releases/download/v0.1.16/vbrain-macos-apple-silicon"
-      sha256 "9ffd86f3205f8918a1876ecff784a0ed6bbda0bc773231b08f5e0f907e47fe09"
+      url "https://github.com/virtual360-io/vbrain/releases/download/v0.1.17/vbrain-macos-apple-silicon"
+      sha256 "39b7ebe3b3535d39a1d72fc1002013b40f806275fc449f46f298273a1d8460d0"
     end
     on_intel do
-      url "https://github.com/virtual360-io/vbrain/releases/download/v0.1.16/vbrain-macos-intel"
-      sha256 "b92eae5b45133c9f8922bb3b09868bfef1c2a1df48424853dbcab4cc8a01eb87"
+      url "https://github.com/virtual360-io/vbrain/releases/download/v0.1.17/vbrain-macos-intel"
+      sha256 "39ff8c96b2fe9212d14723f31fc0210834c3aefb61378fc984a219d28af94936"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/virtual360-io/vbrain/releases/download/v0.1.16/vbrain-linux-arm64"
-      sha256 "538ec95b6c47816ae06bf390b475db34d30b6f08e8292138b68037cd2360b28a"
+      url "https://github.com/virtual360-io/vbrain/releases/download/v0.1.17/vbrain-linux-arm64"
+      sha256 "30dc69c5c721f019a81d840e65bf2178ff616c85d9212730fb78c583cc7b9f6c"
     end
     on_intel do
-      url "https://github.com/virtual360-io/vbrain/releases/download/v0.1.16/vbrain-linux-intel"
-      sha256 "c04398112d920edf0bebc1462c2e374b9246477e3579901482798d6b5ccf25ff"
+      url "https://github.com/virtual360-io/vbrain/releases/download/v0.1.17/vbrain-linux-intel"
+      sha256 "7c3981674630388f0d6c9745b09fc472078add7081a1fcf2e5a2443c92164513"
     end
   end
 
