@@ -1,0 +1,39 @@
+name: pages
+
+# Publishes the static landing page in docs/ to GitHub Pages. configure-pages
+# with enablement:true turns Pages on via the API the first time, so no manual
+# repo-settings toggle is needed. The site is plain HTML (no Jekyll build).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; let an in-flight run finish (don't cancel a publish).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4

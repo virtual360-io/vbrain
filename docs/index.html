@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vbrain — a personal knowledge base that knows what you know and who you are</title>
+<meta name="description" content="vbrain is a personal knowledge base: a single deterministic Go binary + Claude Code skills + SQLite FTS5. Markdown is the source of truth; the LLM only steps in for judgment.">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1c2330; --border:#2a313c;
+    --fg:#e6edf3; --muted:#9aa7b4; --accent:#7c9cff; --accent-2:#a371f7;
+    --soul:#f7b955; --code:#0a0e14; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#ffffff; --panel:#f6f8fa; --panel-2:#eef1f5; --border:#d8dee4;
+      --fg:#1f2328; --muted:#59636e; --accent:#3457d5; --accent-2:#8250df; --code:#0d1117; }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  code,kbd{font-family:var(--mono);font-size:.9em}
+
+  header.hero{padding:88px 0 56px;text-align:center;
+    background:radial-gradient(1200px 400px at 50% -10%, rgba(124,156,255,.16), transparent 70%)}
+  .logo{font-family:var(--mono);font-weight:700;font-size:15px;letter-spacing:.18em;
+    color:var(--muted);text-transform:uppercase}
+  h1{font-size:clamp(34px,6vw,56px);line-height:1.1;margin:18px 0 12px;letter-spacing:-.02em}
+  h1 .grad{background:linear-gradient(92deg,var(--accent),var(--accent-2));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .tagline{font-size:clamp(17px,2.4vw,21px);color:var(--muted);max-width:680px;margin:0 auto 28px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+  .btn{display:inline-block;padding:11px 20px;border-radius:9px;font-weight:600;
+    border:1px solid var(--border);background:var(--panel);color:var(--fg)}
+  .btn.primary{background:linear-gradient(92deg,var(--accent),var(--accent-2));border:none;color:#fff}
+  .btn:hover{text-decoration:none;transform:translateY(-1px);transition:transform .12s}
+
+  section{padding:46px 0;border-top:1px solid var(--border)}
+  h2{font-size:26px;letter-spacing:-.01em;margin:0 0 6px}
+  .sub{color:var(--muted);margin:0 0 26px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:13px;padding:20px}
+  .card h3{margin:0 0 6px;font-size:17px}
+  .card p{margin:0;color:var(--muted);font-size:14.5px}
+  .card .ic{font-size:22px;margin-bottom:8px}
+
+  pre{background:var(--code);color:#e6edf3;border:1px solid var(--border);border-radius:12px;
+    padding:18px 20px;overflow:auto;font-family:var(--mono);font-size:13.5px;line-height:1.7}
+  pre .c{color:#7d8aa0}
+  pre .g{color:#7ee787}
+
+  .soul{background:linear-gradient(180deg,rgba(247,185,85,.08),transparent 60%)}
+  .soul .badge{display:inline-block;font-family:var(--mono);font-size:12px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--soul);border:1px solid rgba(247,185,85,.4);
+    border-radius:999px;padding:3px 11px;margin-bottom:14px}
+  .soul .rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:22px}
+  .soul .rules div{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:16px}
+  .soul .rules strong{color:var(--soul)}
+
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  td code{color:var(--accent)}
+
+  .flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono);
+    font-size:13px;color:var(--muted);margin-top:10px}
+  .flow span{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--fg)}
+  .flow .arrow{border:none;background:none;color:var(--accent);padding:0}
+
+  footer{border-top:1px solid var(--border);padding:34px 0 60px;color:var(--muted);font-size:14px;text-align:center}
+  footer a{color:var(--muted)}
+  .note{color:var(--muted);font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="logo">vbrain</div>
+    <h1>The knowledge base that knows<br><span class="grad">what you know — and who you are</span></h1>
+    <p class="tagline">A personal knowledge base reduced to its essence: Claude Code skills, a single
+      deterministic Go binary, and SQLite FTS5. Markdown is the source of truth; the model only steps
+      in for judgment.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/virtual360-io/vbrain">View on GitHub</a>
+      <a class="btn" href="https://github.com/virtual360-io/vbrain/releases/latest">Download latest</a>
+      <a class="btn" href="#install">Install</a>
+    </div>
+    <p class="note">No Ruby, no gems, no runtime to install — one self-contained binary for Linux, macOS, and Windows.</p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>The premise</h2>
+    <p class="sub">A wiki you own, an index you can throw away, and a model kept on a short leash.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="ic">📄</div>
+        <h3>Markdown is the truth</h3>
+        <p>Your knowledge lives as plain markdown with YAML frontmatter, connected by <code>[[wikilinks]]</code>. Readable in any editor, on GitHub, in Obsidian.</p>
+      </div>
+      <div class="card">
+        <div class="ic">🗃️</div>
+        <h3>SQLite is disposable</h3>
+        <p>The FTS5 index is derived: delete <code>db/</code> and <code>vbrain reindex</code> rebuilds everything from the wiki — graph included.</p>
+      </div>
+      <div class="card">
+        <div class="ic">⚙️</div>
+        <h3>Code does the deterministic work</h3>
+        <p>Detecting sources, normalizing queries, writing frontmatter, building SQL — all tested Go. If code can answer, code answers.</p>
+      </div>
+      <div class="card">
+        <div class="ic">🧠</div>
+        <h3>The model only judges</h3>
+        <p>Chunking, synthesizing pages, consolidating identity — the few tasks that genuinely need judgment. Nothing else.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="soul">
+  <div class="wrap">
+    <span class="badge">★ the soul layer</span>
+    <h2>Knowing is not believing</h2>
+    <p class="sub">You can read Friedman and Marx without believing either — and you don't believe the
+      same thing your whole life. So vbrain keeps a second layer: <code>wiki/_soul/</code>, a small set
+      of pages describing <em>how and why you act</em> — the layer an agent consults before deciding
+      anything in your name.</p>
+    <p>A daily routine looks at your recent <strong>actions</strong> — what you asked, decided, wrote —
+      cross-references them with what you know, and consolidates your identity. Ranking is intent-aware:
+      <em>acting outranks knowing</em>. Soul pages are favored by default, and for decision or belief
+      questions they have absolute precedence over any mere fact.</p>
+    <div class="rules">
+      <div><strong>Lean.</strong> A core memory earns its place by recurring across actions — not by being mentioned once.</div>
+      <div><strong>No silent contradiction.</strong> A belief cycle is either resolved with explicit context, or one belief is stale and pruned.</div>
+      <div><strong>Beliefs are mortal.</strong> What you abandoned is deleted or rewritten as "formerly X, now Y, because…".</div>
+      <div><strong>Grounded.</strong> Every soul page traces to a real signal. If it can't be grounded, it isn't written.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>How a note gets in</h2>
+    <p class="sub">A file or URL flows through one deterministic pipeline; the wiki is never written by hand.</p>
+    <div class="flow">
+      <span>ingest → raw/</span><span class="arrow">→</span>
+      <span>chunk (LLM)</span><span class="arrow">→</span>
+      <span>write pages (LLM)</span><span class="arrow">→</span>
+      <span>write-pages</span><span class="arrow">→</span>
+      <span>reindex</span><span class="arrow">→</span>
+      <span>commit</span>
+    </div>
+    <p class="note">Knowledge pages are written only by <code>vbrain write-pages</code>; the soul layer only by
+      <code>vbrain soul-write</code>, after the routine consolidates. Skills never touch markdown directly.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The skills</h2>
+    <p class="sub">The Claude Code interface — slash commands that call the <code>vbrain</code> binary.</p>
+    <table>
+      <tr><th>Command</th><th>What it does</th></tr>
+      <tr><td><code>/vbrain-add-knowledge</code></td><td>Ingest a file/URL → chunk → generate grounded pages → reindex → commit.</td></tr>
+      <tr><td><code>/vbrain-query-knowledge</code></td><td>Ask in natural language; answers from your notes without exposing internals. Decision/belief questions defer to the soul.</td></tr>
+      <tr><td><code>/vbrain-add-realtime-knowledge</code></td><td>Connect a live source — Google Calendar, Gmail, Slack — via MCP.</td></tr>
+      <tr><td><code>/vbrain-add-routine</code></td><td>Add a cron-scheduled routine with its own prompt.</td></tr>
+      <tr><td><code>/vbrain-routine</code></td><td>Watch loop: fire due routines (like the nightly <code>dream</code> and daily <code>soul</code>).</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Install</h2>
+    <p class="sub">Download the binary for your platform, then let it bootstrap everything.</p>
+<pre><span class="c"># e.g. Linux x86-64 — pick your asset from the latest release</span>
+curl -L -o vbrain https://github.com/virtual360-io/vbrain/releases/latest/download/vbrain-linux-amd64
+chmod +x vbrain
+./vbrain install        <span class="c"># PATH + skills + base bootstrap + GitHub onboarding</span></pre>
+    <p class="note">Assets: <code>vbrain-linux-amd64</code>, <code>vbrain-linux-arm64</code>,
+      <code>vbrain-darwin-amd64</code>, <code>vbrain-darwin-arm64</code>,
+      <code>vbrain-windows-amd64.exe</code>. Update anytime with <code>vbrain update</code>.</p>
+<pre><span class="c"># try it</span>
+printf "# Postgres\n\nUse REPLICA IDENTITY FULL for logical replication.\n" &gt; /tmp/pg.md
+vbrain ingest /tmp/pg.md
+vbrain reindex
+vbrain query "replica identity" --format markdown   <span class="g"># → your note, ranked</span></pre>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>vbrain — inspired by <a href="https://github.com/akitaonrails/ai-memory">akitaonrails/ai-memory</a>,
+      reduced to skills + a single Go binary + SQLite FTS5.</p>
+    <p><a href="https://github.com/virtual360-io/vbrain">Repository</a> ·
+       <a href="https://github.com/virtual360-io/vbrain/releases/latest">Releases</a> ·
+       <a href="https://github.com/virtual360-io/vbrain/blob/main/README.md">Docs</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
