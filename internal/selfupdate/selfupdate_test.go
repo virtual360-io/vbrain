@@ -27,6 +27,24 @@ func serve(t *testing.T, content []byte, sumsOverride string) string {
 	return srv.URL
 }
 
+// assetName must produce the human-friendly names the build workflow uploads,
+// or `vbrain update` downloads a 404. The mapping (darwin→macos, amd64→intel,
+// arm64→apple-silicon only on macOS) is the contract with build.yml.
+func TestAssetName(t *testing.T) {
+	cases := []struct{ os, arch, want string }{
+		{"linux", "amd64", "vbrain-linux-intel"},
+		{"linux", "arm64", "vbrain-linux-arm64"},
+		{"darwin", "amd64", "vbrain-macos-intel"},
+		{"darwin", "arm64", "vbrain-macos-apple-silicon"},
+		{"windows", "amd64", "vbrain-windows-intel.exe"},
+	}
+	for _, c := range cases {
+		if got := assetName(c.os, c.arch); got != c.want {
+			t.Errorf("assetName(%q, %q) = %q, want %q", c.os, c.arch, got, c.want)
+		}
+	}
+}
+
 func TestUpdateReplacesBinaryOnMatchingSha(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "vbrain")
 	os.WriteFile(target, []byte("versão antiga"), 0o755)

@@ -895,10 +895,17 @@ func defaultBinDir() string {
 // installSelf copies the running binary into binDir (no-op if it already runs
 // from there). Returns the final path and whether binDir is already on the PATH.
 func installSelf(binDir string) (string, bool, error) {
-	exe, err := os.Executable()
+	invoked, err := os.Executable()
 	if err != nil {
 		return "", false, err
 	}
+	// Already reachable on PATH from where it runs (e.g. a Homebrew install
+	// under /opt/homebrew/bin) — copying into binDir would leave a duplicate
+	// that `vbrain update` then diverges from the package-managed one.
+	if dir := filepath.Dir(invoked); inPath(dir) {
+		return invoked, true, nil
+	}
+	exe := invoked
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}

@@ -31,11 +31,31 @@ type Result struct {
 	Updated bool   `json:"updated"`
 }
 
-// AssetName returns the binary name for the current platform (e.g.
-// vbrain-linux-amd64, vbrain-windows-amd64.exe).
+// AssetName returns the release binary name for the current platform (e.g.
+// vbrain-linux-intel, vbrain-macos-apple-silicon, vbrain-windows-intel.exe).
 func AssetName() string {
-	n := "vbrain-" + runtime.GOOS + "-" + runtime.GOARCH
-	if runtime.GOOS == "windows" {
+	return assetName(runtime.GOOS, runtime.GOARCH)
+}
+
+// assetName maps a Go os/arch pair to the human-friendly release asset name.
+// darwin→macos, amd64→intel; arm64 is "apple-silicon" on macOS, "arm64"
+// elsewhere. Kept in sync with the build workflow (.github/workflows/build.yml).
+func assetName(goos, goarch string) string {
+	os := goos
+	if os == "darwin" {
+		os = "macos"
+	}
+	arch := goarch
+	switch goarch {
+	case "amd64":
+		arch = "intel"
+	case "arm64":
+		if os == "macos" {
+			arch = "apple-silicon"
+		}
+	}
+	n := "vbrain-" + os + "-" + arch
+	if goos == "windows" {
 		n += ".exe"
 	}
 	return n
