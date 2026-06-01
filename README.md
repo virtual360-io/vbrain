@@ -45,7 +45,8 @@ local-only depending on the user's choice.
 │   └── .tmp/            # pipeline intermediates (extracted-N.txt, pages-N.json)
 ├── wiki/                # markdown with YAML frontmatter — source of truth
 │   ├── <slug>.md        # knowledge pages, flat space; connected by [[wikilinks]]
-│   └── _realtime/       # kind: realtime — phantom pages that trigger MCP handlers
+│   ├── _realtime/       # kind: realtime — phantom pages that trigger MCP handlers
+│   └── _soul/           # kind: soul — identity layer (how/why the user acts), written only by the soul routine
 ├── config/
 │   ├── realtime/        # realtime source config (gcalendar.yml etc.)
 │   └── routines/routines.yml
@@ -64,7 +65,8 @@ JSON on stdout (read by the skills), human-readable text on stderr. Subcommands:
 | Subcommand | What it does |
 |---|---|
 | `vbrain ingest <path\|url>`  | detect source, copy to `raw/`, dedup by sha256, extract |
-| `vbrain write-pages --raw-id N --pages-json P` | the only writer into `wiki/` (atomic staging + orphan guardrail) |
+| `vbrain write-pages --raw-id N --pages-json P` | the only writer into knowledge pages (atomic staging + orphan guardrail) |
+| `vbrain soul-write --pages-json P` | the only writer into the soul layer (`wiki/_soul/`); used by the soul routine, not the ingest pipeline |
 | `vbrain reindex`             | rebuild `pages`/`pages_fts`/`links` from `wiki/` |
 | `vbrain query "<q>"`         | FTS5 + snippet + graph neighbors |
 | `vbrain resolve-links --map M` / `vbrain linkify` | resolve/convert wikilinks |
@@ -100,6 +102,7 @@ JSON on stdout (read by the skills), human-readable text on stderr. Subcommands:
 ```sql
 raw_sources(id, path UNIQUE, original_filename, source_type, sha256 UNIQUE, ingested_at)
 pages(id, path UNIQUE, title, body, kind, tags, sha256, raw_id → raw_sources, created_at, updated_at)
+  kind ∈ {concept, decision, gotcha, note, rule, realtime, soul}
 pages_fts(title, body, tags)              -- virtual FTS5, content='pages'
   tokenize: unicode61 tokenchars '/_-'
 ```
@@ -118,8 +121,30 @@ instead of the snippet.
 Routines are named prompts with a cron schedule in
 `config/routines/routines.yml`; `next_run` is computed deterministically
 (robfig/cron). Execution is **at-most-once** (advances `next_run` before
-running). The default `dream` routine (nightly self-improvement) is seeded at
-setup.
+running). Two routines are seeded at setup: `soul` (daily, 02:00) and `dream`
+(nightly, 03:00).
+
+### Soul (the identity layer)
+
+The knowledge wiki captures **what the user knows**; the soul layer captures
+**who the user is** — how and why they act. Reading a book by Friedman and one
+by Marx does not mean the user believes either, and beliefs change over a
+lifetime. So the soul is kept separate, in `wiki/_soul/` (`kind: soul`).
+
+The daily `soul` routine looks at the user's recent **actions** (questions
+asked, decisions made, pages written), cross-references them with what they
+know, and consolidates the result into a small set of identity pages, with three
+non-negotiable invariants: it stays **lean** (a core memory must recur, not be
+mentioned once), it holds **no unexplained contradiction** (a belief cycle is
+either resolved with explicit context, or one belief is stale and pruned, or it
+was never a core memory), and beliefs are **mortal** (abandoned ones are
+deleted). It runs before `dream` so it reads the query log first.
+
+Ranking is intent-aware ("acting > knowing"): soul pages get a mild boost by
+default, and for **decision/belief** questions they have absolute precedence
+(`vbrain query --soul-authoritative`) — what the user stands for outranks what
+they merely read. The add-knowledge skill is forbidden from writing into the
+soul layer; only the routine does, via `vbrain soul-write`.
 
 ## Repo layout
 
@@ -127,8 +152,8 @@ setup.
 vbrain/
 ├── cmd/vbrain/          # CLI (subcommands, JSON on stdout)
 ├── internal/            # deterministic core (paths, db, page, slug, ftsquery,
-│                        #   links, sources, index, search, writepages, ingest,
-│                        #   resolvelinks, git, routines, realtime, maint,
+│                        #   links, sources, index, search, writepages, soulwrite,
+│                        #   ingest, resolvelinks, git, routines, realtime, maint,
 │                        #   scaffold, selfupdate)
 ├── .claude/skills/      # SKILL.md + sub-agent prompts (embedded in the binary via go:embed)
 └── embed.go             # //go:embed of the skills so `vbrain install` is self-sufficient
@@ -143,7 +168,7 @@ data in a tmpdir via `VBRAIN_HOME` / explicit dirs.
    platform — e.g. `vbrain-linux-amd64`), make it executable.
 2. **Run `vbrain install`** — puts the binary on the PATH (`~/.local/bin`),
    installs the skills (embedded in the binary) into `~/.claude/skills`,
-   bootstraps the base (`CLAUDE.md` + skills + git init + the `dream` routine),
+   bootstraps the base (`CLAUDE.md` + skills + git init + the `soul`/`dream` routines),
    and runs the GitHub onboarding (git identity + PAT + repo creation) when on a
    terminal.
 

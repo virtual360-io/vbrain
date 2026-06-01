@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS pages (
   path        TEXT NOT NULL UNIQUE,
   title       TEXT NOT NULL,
   body        TEXT NOT NULL,
-  kind        TEXT NOT NULL CHECK(kind IN ('concept','decision','gotcha','note','rule','realtime')),
+  kind        TEXT NOT NULL CHECK(kind IN ('concept','decision','gotcha','note','rule','realtime','soul')),
   tags        TEXT NOT NULL DEFAULT '',
   sha256      TEXT NOT NULL,
   raw_id      INTEGER REFERENCES raw_sources(id) ON DELETE SET NULL,
@@ -109,7 +109,7 @@ func Open(path string) (*sql.DB, error) {
 }
 
 // Migrate applies the schema (idempotent) and rebuilds pages if the old CHECK
-// (without 'realtime') is present.
+// (without the newest kind, 'soul') is present.
 func Migrate(db *sql.DB) error {
 	if _, err := db.Exec(SchemaSQL); err != nil {
 		return err
@@ -118,8 +118,10 @@ func Migrate(db *sql.DB) error {
 }
 
 // rebuildPagesIfOldKindCheck drops pages/fts/triggers and recreates the schema
-// if the pages table still has the kind CHECK without 'realtime' (legacy
-// migration).
+// if the pages table still has the kind CHECK without 'soul' (the newest kind).
+// This covers every legacy base — one missing 'realtime', another missing
+// 'soul' — since each new kind is appended last. The index is derived/disposable
+// (rebuilt from wiki/ by `vbrain reindex`), so dropping pages here is safe.
 func rebuildPagesIfOldKindCheck(db *sql.DB) error {
 	var ddl sql.NullString
 	err := db.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name='pages'").Scan(&ddl)
@@ -127,7 +129,7 @@ func rebuildPagesIfOldKindCheck(db *sql.DB) error {
 		return nil // no table yet or benign error: nothing to rebuild
 	}
 	sqlText := ddl.String
-	if strings.Contains(sqlText, "'realtime'") || !strings.Contains(sqlText, "CHECK(kind IN") {
+	if strings.Contains(sqlText, "'soul'") || !strings.Contains(sqlText, "CHECK(kind IN") {
 		return nil
 	}
 

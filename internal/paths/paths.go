@@ -8,13 +8,19 @@ import (
 	"strings"
 )
 
-// RealtimeDir is the wiki's only special subdir: phantom pages with an MCP
-// handler, written by another skill, not by the ingest pipeline.
+// RealtimeDir is a special wiki subdir: phantom pages with an MCP handler,
+// written by another skill, not by the ingest pipeline.
 const RealtimeDir = "_realtime"
 
+// SoulDir is the identity layer: pages describing how and why the user acts —
+// values, decision patterns, "core memories". Written ONLY by the soul routine
+// after consolidation (never by the add-knowledge pipeline).
+const SoulDir = "_soul"
+
 // Kinds are the valid `kind` values in the frontmatter. Free metadata — it no
-// longer determines the folder (flat layout, ai-memory style).
-var Kinds = []string{"concept", "decision", "gotcha", "note", "rule", "realtime"}
+// longer determines the folder (flat layout, ai-memory style), except for the
+// reserved _realtime/_soul subdirs.
+var Kinds = []string{"concept", "decision", "gotcha", "note", "rule", "realtime", "soul"}
 
 // DataHome returns the data root: VBRAIN_HOME if set and non-empty; otherwise,
 // if the current directory is a base (it carries wiki/), use it — this covers
@@ -43,9 +49,11 @@ func DBDir() string   { return filepath.Join(DataHome(), "db") }
 func DBPath() string  { return filepath.Join(DBDir(), "vbrain.sqlite3") }
 func TmpDir() string  { return filepath.Join(RawDir(), ".tmp") }
 
-// EnsureDirs creates the flat directory structure plus wiki/_realtime.
+// EnsureDirs creates the flat directory structure plus wiki/_realtime and
+// wiki/_soul.
 func EnsureDirs() error {
-	dirs := []string{RawDir(), WikiDir(), DBDir(), TmpDir(), filepath.Join(WikiDir(), RealtimeDir)}
+	dirs := []string{RawDir(), WikiDir(), DBDir(), TmpDir(),
+		filepath.Join(WikiDir(), RealtimeDir), filepath.Join(WikiDir(), SoulDir)}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return err

@@ -89,6 +89,48 @@ func TestQueryRelatedViaGraph(t *testing.T) {
 	}
 }
 
+// The soul layer encodes "acting > knowing": when an identity page and a
+// knowledge page are equally relevant, the soul page must surface first by
+// default, so an agent deciding in the user's name sees who they are before
+// what they read.
+func TestQueryDefaultBoostFavorsSoul(t *testing.T) {
+	d := openDB(t)
+	insert(t, d, "_soul/freedom.md", "Freedom", "liberty matters to me", "soul")
+	insert(t, d, "friedman.md", "Friedman", "liberty matters in the book", "concept")
+
+	res, err := search.Query(d, "liberty", search.Opts{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Results) != 2 {
+		t.Fatalf("results = %d, want 2", len(res.Results))
+	}
+	if res.Results[0].Kind != "soul" {
+		t.Errorf("default boost should rank soul first, got %q (%s)", res.Results[0].Kind, res.Results[0].Path)
+	}
+}
+
+// For decision/belief questions the soul layer has ABSOLUTE precedence: even a
+// far more relevant knowledge page must rank below an identity page, because
+// what the user believes outranks what the user merely knows.
+func TestQuerySoulAuthoritativePinsSoulFirst(t *testing.T) {
+	d := openDB(t)
+	insert(t, d, "_soul/values.md", "Values", "freedom", "soul")
+	// A knowledge page that matches the term far more strongly.
+	insert(t, d, "marx.md", "Marx", "freedom freedom freedom freedom freedom", "concept")
+
+	res, err := search.Query(d, "freedom", search.Opts{Limit: 10, SoulAuthoritative: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Results) != 2 {
+		t.Fatalf("results = %d, want 2", len(res.Results))
+	}
+	if res.Results[0].Kind != "soul" {
+		t.Errorf("authoritative mode must pin soul first regardless of bm25, got %q", res.Results[0].Kind)
+	}
+}
+
 func TestQueryLogsSourceQuery(t *testing.T) {
 	d := openDB(t)
 	insert(t, d, "c.md", "Carreira", "consultor visagio", "note")

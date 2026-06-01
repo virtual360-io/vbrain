@@ -8,6 +8,9 @@ import (
 //go:embed dream.prompt.md
 var dreamPrompt string
 
+//go:embed soul.prompt.md
+var soulPrompt string
+
 // defaultRoutine describes a routine seeded by default at setup.
 type defaultRoutine struct {
 	slug, description, schedule, prompt string
@@ -15,6 +18,13 @@ type defaultRoutine struct {
 }
 
 var defaults = []defaultRoutine{
+	{
+		slug:        "soul",
+		description: "Daily identity consolidation: distills recent actions into the lean, contradiction-free soul layer (how and why the user acts).",
+		schedule:    "0 2 * * *", // before dream, so it reads the query log before dream drains it
+		enabled:     true,
+		prompt:      soulPrompt,
+	},
 	{
 		slug:        "dream",
 		description: "Nightly self-improvement: reads the query_log and reorganizes the wiki to answer better.",

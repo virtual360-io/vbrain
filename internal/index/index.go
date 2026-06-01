@@ -58,11 +58,14 @@ func Reindex(db *sql.DB, wikiDir string) (Stats, error) {
 		}
 		kind := asString(fm["kind"])
 		if !kindSet[kind] {
-			// Flat layout: trust the frontmatter; _realtime is realtime by
-			// construction, everything else defaults to note.
-			if strings.SplitN(rel, "/", 2)[0] == paths.RealtimeDir {
+			// Flat layout: trust the frontmatter; the reserved subdirs are
+			// realtime/soul by construction, everything else defaults to note.
+			switch strings.SplitN(rel, "/", 2)[0] {
+			case paths.RealtimeDir:
 				kind = "realtime"
-			} else {
+			case paths.SoulDir:
+				kind = "soul"
+			default:
 				kind = "note"
 			}
 		}

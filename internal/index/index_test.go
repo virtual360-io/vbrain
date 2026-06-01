@@ -113,20 +113,23 @@ func TestReindexDeletesMissing(t *testing.T) {
 	}
 }
 
-func TestReindexDefaultsKindFromRealtimeDir(t *testing.T) {
+func TestReindexDefaultsKindFromReservedDirs(t *testing.T) {
 	d, wiki := setup(t)
-	// Sem kind no frontmatter; sob _realtime → realtime, fora → note.
+	// No kind in the frontmatter: under _realtime → realtime, under _soul →
+	// soul (the identity layer is soul by construction), otherwise → note.
 	writePage(t, wiki, "_realtime/gcal.md", "---\ntitle: GCal\n---\nx\n")
+	writePage(t, wiki, "_soul/freedom.md", "---\ntitle: Freedom\n---\nz\n")
 	writePage(t, wiki, "loose.md", "---\ntitle: Loose\n---\ny\n")
 	if _, err := index.Reindex(d, wiki); err != nil {
 		t.Fatal(err)
 	}
 
-	var rk, lk string
+	var rk, sk, lk string
 	d.QueryRow("SELECT kind FROM pages WHERE path = '_realtime/gcal.md'").Scan(&rk)
+	d.QueryRow("SELECT kind FROM pages WHERE path = '_soul/freedom.md'").Scan(&sk)
 	d.QueryRow("SELECT kind FROM pages WHERE path = 'loose.md'").Scan(&lk)
-	if rk != "realtime" || lk != "note" {
-		t.Fatalf("realtime=%q loose=%q", rk, lk)
+	if rk != "realtime" || sk != "soul" || lk != "note" {
+		t.Fatalf("realtime=%q soul=%q loose=%q", rk, sk, lk)
 	}
 }
 

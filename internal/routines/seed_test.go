@@ -7,13 +7,13 @@ import (
 	"github.com/virtual360-io/vbrain/internal/routines"
 )
 
-func TestSeedDefaultsAddsDreamOnceIdempotent(t *testing.T) {
+func TestSeedDefaultsAddsSoulAndDreamOnceIdempotent(t *testing.T) {
 	isolate(t)
 	r1, err := routines.SeedDefaults(false, fixedNow)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r1.Seeded) != 1 || r1.Seeded[0] != "dream" {
+	if len(r1.Seeded) != 2 || !contains(r1.Seeded, "soul") || !contains(r1.Seeded, "dream") {
 		t.Fatalf("seeded = %v", r1.Seeded)
 	}
 
@@ -29,13 +29,35 @@ func TestSeedDefaultsAddsDreamOnceIdempotent(t *testing.T) {
 		t.Errorf("prompt not adapted to Go")
 	}
 
-	// Second call: skip, doesn't duplicate.
+	// Soul runs before dream so it reads the query log before dream drains it,
+	// and its prompt encodes the non-negotiable identity invariants.
+	soul, _ := routines.Find("soul")
+	if soul == nil || soul.Schedule == nil || *soul.Schedule != "0 2 * * *" || !soul.Enabled {
+		t.Fatalf("soul = %+v", soul)
+	}
+	if !strings.Contains(soul.Prompt, "vbrain soul-write") {
+		t.Errorf("soul prompt must use the soul-write writer")
+	}
+	if !strings.Contains(soul.Prompt, "Lean") || !strings.Contains(soul.Prompt, "contradiction") {
+		t.Errorf("soul prompt must encode the lean + no-contradiction rules")
+	}
+
+	// Second call: skip both, no duplicates.
 	r2, _ := routines.SeedDefaults(false, fixedNow)
-	if len(r2.Seeded) != 0 || len(r2.Skipped) != 1 {
+	if len(r2.Seeded) != 0 || len(r2.Skipped) != 2 {
 		t.Fatalf("r2 = %+v", r2)
 	}
 	all, _ := routines.LoadAll()
-	if len(all) != 1 {
-		t.Fatalf("total = %d, want 1", len(all))
+	if len(all) != 2 {
+		t.Fatalf("total = %d, want 2", len(all))
 	}
+}
+
+func contains(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }

@@ -128,8 +128,11 @@ In vbrain there are conventions that look opinionated but are intentional:
 
 - The `vbrain` subcommands return **JSON** on stdout (read by the skills) and
   human-readable text on stderr. Don't invert this.
-- The wiki is written **only** by `vbrain write-pages` (`internal/writepages`).
-  Skills never write markdown directly into `wiki/`.
+- The wiki is written **only** through code: knowledge pages by `vbrain
+  write-pages` (`internal/writepages`), and the soul layer (`wiki/_soul/`) by
+  `vbrain soul-write` (`internal/soulwrite`) — and nothing else may write
+  `_soul/`, not even the add-knowledge pipeline. Skills never write markdown
+  directly into `wiki/`.
 - `raw/` is **immutable** once written. If the content needs to change,
   re-ingest.
 - There is no `wiki/index.md`. The index is SQLite. Don't try to recreate one.

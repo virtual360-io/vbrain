@@ -51,10 +51,33 @@ vbrain tags --limit 60
    question in `--source-query` (the `query_log` keeps both — it's what the
    `dream` routine analyzes to reorganize the wiki).
 
+### 0c. Intent — is this about who the user IS, or what they KNOW?
+
+vbrain has a **soul layer**: pages describing how and *why* the user acts —
+their values, beliefs, recurring decision patterns. By default soul pages are
+already favored in ranking ("acting > knowing"), but for some questions they
+must have **absolute** precedence. Classify the question:
+
+- **Decision / belief** — "what would I do?", "what do I value?", "do I believe
+  X?", "decide this for me", or any agent acting *on the user's behalf*. Here the
+  soul is authoritative: pass `--soul-authoritative` so identity pages rank above
+  plain knowledge, no matter how lexically relevant a mere fact is.
+- **Factual recall** — "what do I know about X?", "what did I read on Y?". Here
+  knowledge should win on its merits; **don't** pass `--soul-authoritative` (the
+  default mild soul boost is enough).
+
+When in doubt (mixed question), lean factual — don't force the soul.
+
 ### 1. FTS5
 
 ```bash
 vbrain query "<query>" --limit <N> --source-query "<original question>" --format json
+```
+
+For a decision/belief question (step 0c), add `--soul-authoritative`:
+
+```bash
+vbrain query "<query>" --limit <N> --source-query "<original question>" --soul-authoritative --format json
 ```
 
 Parse `results`. Each item has `path`, `title`, `kind`, `snippet`.
@@ -237,7 +260,12 @@ You now have the FTS5 hits (and any realtime handler output). To answer:
    if you simply know it (it's their own knowledge). You MAY infer or deduce a
    conclusion the notes don't state verbatim — **as long as every supporting
    fact comes from the retrieved content**, never from outside knowledge.
-3. Lead with the answer. Keep it tight and conversational.
+3. **For a decision/belief question, the soul layer is the authoritative voice.**
+   Hits with `kind == "soul"` describe how and why the user actually acts; when
+   they conflict with a plain knowledge page, the soul wins (a book the user read
+   is not a belief the user holds). Frame the answer as who they are / how they'd
+   act — but never name the "soul" layer or any `kind`; just speak as them.
+4. Lead with the answer. Keep it tight and conversational.
 
 **Never expose the guts of vbrain in the answer.** Do NOT mention or show:
 

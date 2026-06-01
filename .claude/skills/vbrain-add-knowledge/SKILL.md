@@ -267,6 +267,11 @@ Show:
 ## Hard rules
 
 - **Never** write into `wiki/` directly; always via `vbrain write-pages`.
+- **Never** touch the soul layer (`wiki/_soul/`). That folder is the user's
+  identity — how and *why* they act — and is written **only** by the daily `soul`
+  routine after it consolidates their actions. This skill ingests knowledge, not
+  beliefs: never set `kind: soul`, never target a `_soul/` slug, never call
+  `vbrain soul-write`. Reading a source is not adopting it as a belief.
 - **Never** modify `raw/` after ingestion — it's immutable.
 - If `go test` fails before the final run (case 1 of the unknown type), do
   **not** proceed until the user fixes it.

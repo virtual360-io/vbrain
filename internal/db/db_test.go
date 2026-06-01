@@ -151,6 +151,17 @@ func TestCheckConstraintAcceptsRealtimeKind(t *testing.T) {
 	}
 }
 
+func TestCheckConstraintAcceptsSoulKind(t *testing.T) {
+	d := openMem(t)
+	_, err := d.Exec(
+		"INSERT INTO pages (path, title, body, kind, sha256) VALUES (?, ?, ?, ?, ?)",
+		"_soul/freedom.md", "Freedom", "body", "soul", "sha",
+	)
+	if err != nil {
+		t.Fatalf("soul kind should be accepted: %v", err)
+	}
+}
+
 func TestLinkCascadesWhenSourcePageDeleted(t *testing.T) {
 	d := openMem(t)
 	fromID := insertPage(t, d, "a.md", "A", "s1")
@@ -232,8 +243,45 @@ CREATE TABLE pages (
 	if err := d.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name='pages'").Scan(&ddl); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(ddl, "'realtime'") {
-		t.Errorf("pages schema should have been rebuilt with 'realtime': %s", ddl)
+	if !strings.Contains(ddl, "'soul'") {
+		t.Errorf("pages schema should have been rebuilt with the newest kind 'soul': %s", ddl)
+	}
+}
+
+// A base from the intermediate era — it already knew 'realtime' but predates
+// 'soul' — must also be rebuilt, so soul-kind inserts stop failing the CHECK.
+func TestMigrateRebuildsPagesWhenCheckMissingSoul(t *testing.T) {
+	d, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	d.SetMaxOpenConns(1)
+
+	if _, err := d.Exec(`
+CREATE TABLE pages (
+  id          INTEGER PRIMARY KEY,
+  path        TEXT NOT NULL UNIQUE,
+  title       TEXT NOT NULL,
+  body        TEXT NOT NULL,
+  kind        TEXT NOT NULL CHECK(kind IN ('concept','decision','gotcha','note','rule','realtime')),
+  tags        TEXT NOT NULL DEFAULT '',
+  sha256      TEXT NOT NULL,
+  raw_id      INTEGER,
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Migrate(d); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(
+		"INSERT INTO pages (path, title, body, kind, sha256) VALUES (?, ?, ?, ?, ?)",
+		"_soul/values.md", "Values", "body", "soul", "sha",
+	); err != nil {
+		t.Fatalf("after migration a soul page must insert cleanly: %v", err)
 	}
 }
 

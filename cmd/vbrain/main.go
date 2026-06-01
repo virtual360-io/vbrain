@@ -32,12 +32,13 @@ import (
 	"github.com/virtual360-io/vbrain/internal/scaffold"
 	"github.com/virtual360-io/vbrain/internal/search"
 	"github.com/virtual360-io/vbrain/internal/selfupdate"
+	"github.com/virtual360-io/vbrain/internal/soulwrite"
 	"github.com/virtual360-io/vbrain/internal/writepages"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: vbrain <reindex|query|ingest|write-pages|resolve-links|commit|routines|realtime|install|update> [args]")
+		fmt.Fprintln(os.Stderr, "usage: vbrain <reindex|query|ingest|write-pages|soul-write|resolve-links|commit|routines|realtime|install|update> [args]")
 		os.Exit(2)
 	}
 	var err error
@@ -50,6 +51,8 @@ func main() {
 		err = cmdCommit(os.Args[2:])
 	case "write-pages":
 		err = cmdWritePages(os.Args[2:])
+	case "soul-write":
+		err = cmdSoulWrite(os.Args[2:])
 	case "resolve-links":
 		err = cmdResolveLinks(os.Args[2:])
 	case "ingest":
@@ -112,6 +115,8 @@ func cmdQuery(args []string) error {
 	prefix := fs.Bool("prefix", false, "prefix matching")
 	sourceQuery := fs.String("source-query", "", "original NL question")
 	noLog := fs.Bool("no-log", false, "don't record in query_log")
+	soulBoost := fs.Float64("soul-boost", 0, "multiplier favoring soul hits (<=0 → default)")
+	soulAuthoritative := fs.Bool("soul-authoritative", false, "pin soul hits first (decision/belief questions)")
 
 	// Go's flag package doesn't permute (it stops at the first positional); the
 	// skill passes flags after the query (`query "x" --format json`). Split them
@@ -137,10 +142,12 @@ func cmdQuery(args []string) error {
 	defer d.Close()
 
 	res, err := search.Query(d, query, search.Opts{
-		Limit:       *limit,
-		Prefix:      *prefix,
-		SourceQuery: *sourceQuery,
-		Log:         !*noLog,
+		Limit:             *limit,
+		Prefix:            *prefix,
+		SourceQuery:       *sourceQuery,
+		Log:               !*noLog,
+		SoulBoost:         *soulBoost,
+		SoulAuthoritative: *soulAuthoritative,
 	})
 	if err != nil {
 		return err
@@ -154,7 +161,11 @@ func cmdQuery(args []string) error {
 }
 
 // boolFlags are the query flags that don't consume a value.
-var boolFlags = map[string]bool{"-prefix": true, "--prefix": true, "-no-log": true, "--no-log": true}
+var boolFlags = map[string]bool{
+	"-prefix": true, "--prefix": true,
+	"-no-log": true, "--no-log": true,
+	"-soul-authoritative": true, "--soul-authoritative": true,
+}
 
 // splitArgs separates flags (and their values) from positional arguments,
 // allowing flags in any position — mirrors Ruby's OptionParser behavior.
@@ -286,6 +297,48 @@ func cmdWritePages(args []string) error {
 		os.Exit(3) // orphan guardrail: an agent needs to review
 	}
 	return nil
+}
+
+// cmdSoulWrite is the only writer into the soul layer (wiki/_soul/). It is kept
+// separate from write-pages on purpose: soul pages come from the daily soul
+// routine's consolidation, never from the add-knowledge pipeline.
+func cmdSoulWrite(args []string) error {
+	fs := flag.NewFlagSet("soul-write", flag.ContinueOnError)
+	pagesJSON := fs.String("pages-json", "", "path to the soul pages JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *pagesJSON == "" {
+		return fmt.Errorf("--pages-json is required")
+	}
+
+	data, err := os.ReadFile(*pagesJSON)
+	if err != nil {
+		return err
+	}
+	var pages []soulwrite.PageInput
+	if t := bytes.TrimSpace(data); len(t) > 0 && t[0] == '[' {
+		if err := json.Unmarshal(data, &pages); err != nil {
+			return err
+		}
+	} else {
+		var wrapper struct {
+			Pages []soulwrite.PageInput `json:"pages"`
+		}
+		if err := json.Unmarshal(data, &wrapper); err != nil {
+			return err
+		}
+		pages = wrapper.Pages
+	}
+
+	if err := paths.EnsureDirs(); err != nil {
+		return err
+	}
+	res, err := soulwrite.SoulWrite(pages, paths.WikiDir())
+	if err != nil {
+		return err
+	}
+	return emitJSON(res)
 }
 
 func cmdResolveLinks(args []string) error {

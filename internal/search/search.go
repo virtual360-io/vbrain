@@ -9,14 +9,27 @@ import (
 	"github.com/virtual360-io/vbrain/internal/ftsquery"
 )
 
-// Opts controls the limit, prefix matching, the original NL question, and
-// logging.
+// Opts controls the limit, prefix matching, the original NL question, the soul
+// ranking, and logging.
 type Opts struct {
 	Limit       int
 	Prefix      bool
 	SourceQuery string
 	Log         bool
+
+	// SoulBoost multiplies the bm25 score of kind=soul hits so the identity
+	// layer surfaces above plain knowledge ("acting > knowing"). >1 ranks soul
+	// higher; <=0 falls back to DefaultSoulBoost. This is the adjustable boost.
+	SoulBoost float64
+	// SoulAuthoritative orders soul hits strictly before everything else,
+	// regardless of bm25 — for decision/belief questions, where what the user
+	// stands for has absolute precedence over what the user merely knows.
+	SoulAuthoritative bool
 }
+
+// DefaultSoulBoost is the mild, always-on favoring of the soul layer when no
+// explicit SoulBoost is given.
+const DefaultSoulBoost = 2.0
 
 // Hit is an FTS5 result (with a highlighted snippet).
 type Hit struct {
@@ -41,13 +54,18 @@ type Result struct {
 	Related    []Related `json:"related"`
 }
 
+// ftsSQL ranks by bm25 (lower = more relevant), with the soul layer favored:
+// the boost multiplier deepens soul scores so they sort first, and the
+// authoritative flag pins soul hits ahead of everything regardless of score.
 const ftsSQL = `
 SELECT p.id, p.path, p.title, p.kind,
        snippet(pages_fts, 1, '**', '**', '…', 12) AS snip
   FROM pages_fts
   JOIN pages p ON p.id = pages_fts.rowid
  WHERE pages_fts MATCH ?
- ORDER BY rank
+ ORDER BY
+   CASE WHEN ? AND p.kind = 'soul' THEN 0 ELSE 1 END,
+   bm25(pages_fts) * (CASE WHEN p.kind = 'soul' THEN ? ELSE 1.0 END)
  LIMIT ?`
 
 // Query normalizes, searches FTS5, appends graph neighbors, and (optionally)
@@ -66,7 +84,16 @@ func Query(db *sql.DB, query string, opts Opts) (Result, error) {
 		return res, nil
 	}
 
-	rows, err := db.Query(ftsSQL, normalized, opts.Limit)
+	boost := opts.SoulBoost
+	if boost <= 0 {
+		boost = DefaultSoulBoost
+	}
+	authoritative := 0
+	if opts.SoulAuthoritative {
+		authoritative = 1
+	}
+
+	rows, err := db.Query(ftsSQL, normalized, authoritative, boost, opts.Limit)
 	if err != nil {
 		return res, err
 	}
