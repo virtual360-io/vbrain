@@ -879,11 +879,10 @@ func bootstrapBase(out map[string]any, github, repoName, token string) error {
 	if err := paths.EnsureDirs(); err != nil {
 		return err
 	}
-	claudeMD, err := scaffold.WriteClaudeMD(dataHome)
-	if err != nil {
+	if err := scaffold.WriteClaudeMD(dataHome); err != nil {
 		return err
 	}
-	out["claude_md"] = claudeMD
+	out["claude_md"] = true
 
 	if skills, err := embeddedSkills(); err == nil {
 		n, err := scaffold.InstallSkills(dataHome, skills)

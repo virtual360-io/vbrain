@@ -11,9 +11,8 @@ import (
 
 func TestWritesClaudeMDInstructingToUseSkills(t *testing.T) {
 	dir := t.TempDir()
-	ok, err := scaffold.WriteClaudeMD(dir)
-	if err != nil || !ok {
-		t.Fatalf("ok=%v err=%v", ok, err)
+	if err := scaffold.WriteClaudeMD(dir); err != nil {
+		t.Fatal(err)
 	}
 	body, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
 	for _, want := range []string{"ALWAYS use the vbrain skills", "/vbrain-query-knowledge", "/vbrain-add-knowledge"} {
@@ -33,7 +32,7 @@ func TestWritesClaudeMDInstructingToUseSkills(t *testing.T) {
 // that the self-provision hint (go install + the release URL) is present.
 func TestClaudeMDTellsHowToProvisionVbrainWhenMissing(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := scaffold.WriteClaudeMD(dir); err != nil {
+	if err := scaffold.WriteClaudeMD(dir); err != nil {
 		t.Fatal(err)
 	}
 	body, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
@@ -47,16 +46,21 @@ func TestClaudeMDTellsHowToProvisionVbrainWhenMissing(t *testing.T) {
 	}
 }
 
-func TestDoesNotClobberExistingClaudeMD(t *testing.T) {
+// CLAUDE.md is a vbrain-managed asset (like the skills): WriteClaudeMD must
+// OVERWRITE an existing one, so an updated base picks up the current instructions
+// instead of being frozen at whatever shipped on first install.
+func TestOverwritesExistingClaudeMD(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("# custom\n"), 0o644)
-	ok, err := scaffold.WriteClaudeMD(dir)
-	if err != nil || ok {
-		t.Fatalf("should not overwrite: ok=%v", ok)
+	os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("# stale\n"), 0o644)
+	if err := scaffold.WriteClaudeMD(dir); err != nil {
+		t.Fatal(err)
 	}
 	body, _ := os.ReadFile(filepath.Join(dir, "CLAUDE.md"))
-	if string(body) != "# custom\n" {
-		t.Errorf("clobbered: %q", body)
+	if string(body) == "# stale\n" {
+		t.Error("WriteClaudeMD should have overwritten the stale CLAUDE.md")
+	}
+	if !strings.Contains(string(body), "ALWAYS use the vbrain skills") {
+		t.Error("overwritten CLAUDE.md should contain the generated content")
 	}
 }
 

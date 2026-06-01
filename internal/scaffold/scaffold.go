@@ -60,20 +60,16 @@ derived index — disposable (you can delete it and rebuild with
 what needs judgment (chunking, synthesizing pages).
 `
 
-// WriteClaudeMD writes CLAUDE.md if it doesn't exist yet (does not clobber a
-// user's customization). Returns true if it wrote.
-func WriteClaudeMD(dir string) (bool, error) {
-	path := filepath.Join(dir, "CLAUDE.md")
-	if _, err := os.Stat(path); err == nil {
-		return false, nil
-	}
+// WriteClaudeMD writes (overwriting) the base's CLAUDE.md. Like the skills, it's
+// a vbrain-managed asset regenerated on every install/update — so a new release's
+// instructions (e.g. the self-provision steps) reach an existing base instead of
+// being frozen at whatever shipped on first install. The base holds data, not a
+// hand-edited CLAUDE.md; customization doesn't live here.
+func WriteClaudeMD(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return false, err
+		return err
 	}
-	if err := os.WriteFile(path, []byte(ClaudeMD), 0o644); err != nil {
-		return false, err
-	}
-	return true, nil
+	return os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(ClaudeMD), 0o644)
 }
 
 // InstallSkills copies each skill (a subdirectory of skills, an fs.FS —
