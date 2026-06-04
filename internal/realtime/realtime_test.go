@@ -145,6 +145,129 @@ func TestSlackChannelFilter(t *testing.T) {
 	}
 }
 
+func TestGitHubGlobalAndFilteredBody(t *testing.T) {
+	isolate(t)
+	g := realtime.GitHub{}
+	// empty = global, allowed
+	saved, err := g.SaveConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !g.Global(saved) {
+		t.Error("empty list should be global")
+	}
+	if !strings.Contains(g.Body(saved), "global") {
+		t.Error("global body should mention a global search")
+	}
+
+	repos := []realtime.Item{{"owner": "virtual360-io", "name": "vbrain"}}
+	if g.Global(repos) {
+		t.Error("with a repo it should not be global")
+	}
+	if !strings.Contains(g.Body(repos), "virtual360-io/vbrain") {
+		t.Errorf("filtered body: %s", firstBullet(g.Body(repos)))
+	}
+}
+
+func TestGitHubNormalizesFullNameAndDropsIncomplete(t *testing.T) {
+	isolate(t)
+	saved, err := realtime.GitHub{}.SaveConfig([]map[string]string{
+		{"full_name": "virtual360-io/vbrain"},
+		{"owner": "acme"}, // incomplete: dropped
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved) != 1 || saved[0]["owner"] != "virtual360-io" || saved[0]["name"] != "vbrain" {
+		t.Fatalf("saved = %+v", saved)
+	}
+}
+
+func TestGitHubRepoFilterClause(t *testing.T) {
+	g := realtime.GitHub{}
+	if got := g.RepoFilterClause(nil); got != "" {
+		t.Errorf("global = %q", got)
+	}
+	one := g.RepoFilterClause([]realtime.Item{{"owner": "virtual360-io", "name": "vbrain"}})
+	if one != "repo:virtual360-io/vbrain" {
+		t.Errorf("1 repo = %q", one)
+	}
+	two := g.RepoFilterClause([]realtime.Item{
+		{"owner": "a", "name": "b"}, {"owner": "c", "name": "d"},
+	})
+	if two != "repo:a/b repo:c/d" {
+		t.Errorf("2 repos = %q", two)
+	}
+}
+
+func TestDatadogNormalizesKindsAndDropsUnknown(t *testing.T) {
+	isolate(t)
+	saved, err := realtime.Datadog{}.SaveConfig([]map[string]string{
+		{"kind": "alerts", "tag": "service:vbrain"}, // -> monitor
+		{"kind": "incidents"},                       // -> incident
+		{"kind": "metrics"},                         // -> dashboard
+		{"kind": "logs"},                            // unknown: dropped
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved) != 3 {
+		t.Fatalf("saved = %+v", saved)
+	}
+	if saved[0]["kind"] != "monitor" || saved[0]["tag"] != "service:vbrain" {
+		t.Errorf("alerts should normalize to monitor: %+v", saved[0])
+	}
+	if saved[1]["kind"] != "incident" || saved[2]["kind"] != "dashboard" {
+		t.Errorf("kind normalization: %+v", saved)
+	}
+}
+
+func TestDatadogAllKindsAndBody(t *testing.T) {
+	isolate(t)
+	d := realtime.Datadog{}
+	saved, err := d.SaveConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.AllKinds(saved) {
+		t.Error("empty scopes should mean all kinds")
+	}
+	if !strings.Contains(d.Body(saved), "all") {
+		t.Error("all-kinds body should say it covers all kinds")
+	}
+	// the body must stay honest that the handler is pending (no Datadog MCP)
+	if !strings.Contains(d.Body(saved), "No Datadog MCP is connected yet") {
+		t.Error("body must flag that the live handler is pending")
+	}
+
+	scoped := []realtime.Item{{"kind": "monitor", "tag": "env:prod"}}
+	if d.AllKinds(scoped) {
+		t.Error("with a scope it should not be all-kinds")
+	}
+	if !strings.Contains(d.Body(scoped), "monitor (`env:prod`)") {
+		t.Errorf("scoped body: %s", firstBullet(d.Body(scoped)))
+	}
+}
+
+func TestDatadogWritesPage(t *testing.T) {
+	isolate(t)
+	saved, err := realtime.Datadog{}.SaveConfig([]map[string]string{{"kind": "monitor"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := realtime.Datadog{}.WriteWikiPage(saved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != filepath.Join(paths.WikiDir(), "_realtime", "datadog.md") {
+		t.Errorf("path = %q", path)
+	}
+	p, _ := page.Parse(path)
+	if p.Frontmatter["kind"] != "realtime" || p.Frontmatter["source"] != "datadog" {
+		t.Errorf("frontmatter = %+v", p.Frontmatter)
+	}
+}
+
 func firstBullet(body string) string {
 	for _, l := range strings.Split(body, "\n") {
 		if strings.HasPrefix(l, "- ") {

@@ -1,7 +1,7 @@
 ---
 name: vbrain-query-knowledge
-description: Answers a question from your vbrain notes — searches the base (SQLite FTS5) internally and replies in natural, synthesized language, without exposing vbrain's internals (no paths, filenames, page/kind/tag metadata, or citation lists). It may infer a conclusion the notes don't state verbatim, as long as every supporting fact comes from the notes. kind=realtime pages trigger live handlers (Google Calendar, Gmail, and Slack via MCP). Use when the user asks something that might be archived ("what do I know about X", "how do I usually do Y"), or when another agent needs persisted context for a task.
-allowed-tools: Bash, Read, mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_thread
+description: Answers a question from your vbrain notes — searches the base (SQLite FTS5) internally and replies in natural, synthesized language, without exposing vbrain's internals (no paths, filenames, page/kind/tag metadata, or citation lists). It may infer a conclusion the notes don't state verbatim, as long as every supporting fact comes from the notes. kind=realtime pages trigger live handlers (Google Calendar, Gmail, Slack, and GitHub via MCP; Datadog is connected but its live handler is pending). Use when the user asks something that might be archived ("what do I know about X", "how do I usually do Y"), or when another agent needs persisted context for a task.
+allowed-tools: Bash, Read, mcp__claude_ai_Google_Calendar__list_events, mcp__claude_ai_Gmail__search_threads, mcp__claude_ai_Gmail__get_thread, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_thread, mcp__github__search_issues, mcp__github__search_pull_requests, mcp__github__list_commits, mcp__github__pull_request_read, mcp__github__issue_read
 ---
 
 # vbrain-query-knowledge
@@ -111,6 +111,8 @@ corresponding live handler. Read the page's full frontmatter at
 | `gcalendar` | `mcp__claude_ai_Google_Calendar__list_events` (see 3a)       |
 | `gmail`     | `mcp__claude_ai_Gmail__search_threads` (see 3b)              |
 | `slack`     | `mcp__claude_ai_Slack__slack_search_public_and_private` (3c) |
+| `github`    | `mcp__github__search_issues` / `search_pull_requests` (3d)   |
+| `datadog`   | no MCP wired yet — report it's unreachable (see 3e)          |
 | other       | report "realtime source `X` has no handler implemented"      |
 
 **3a. `gcalendar` handler:**
@@ -248,6 +250,64 @@ range."
 If the user asks for a specific full thread ("open that conversation"), call
 `mcp__claude_ai_Slack__slack_read_thread` with the `channel_id` and the parent
 message's `message_ts`.
+
+**3d. `github` handler:**
+
+Read the page frontmatter, take the `repos` list (each with `owner`, `name`).
+Build the search `query` in **GitHub search syntax**:
+
+1. **Repo filter** (prepended when repos are connected): one `repo:<owner>/<name>`
+   qualifier per repo, space-separated — GitHub OR-combines them in a single
+   query (e.g. `repo:virtual360-io/vbrain repo:acme/api`). If the `repos` list is
+   **empty** (global mode), don't prepend — search every accessible repo.
+2. **Type**: decide issues vs PRs from the query and add the qualifier:
+   - "PR", "pull request", "merge", "review" → `is:pr`, call
+     `mcp__github__search_pull_requests`.
+   - "issue", "bug", "ticket" → `is:issue`, call `mcp__github__search_issues`.
+   - Ambiguous → default to `mcp__github__search_issues` (it spans both; add
+     neither `is:` qualifier).
+3. **Content**: convert the meaningful terms:
+   - State → `is:open` / `is:closed` / `is:merged` (default: none = any).
+   - Author/assignee → `author:<user>` / `assignee:<user>` when the query names
+     who.
+   - Relative dates → `created:>YYYY-MM-DD` or `updated:>YYYY-MM-DD` (compute
+     from the current date; "this week" → `updated:>` 7 days ago).
+   - Labels → `label:"<name>"`.
+   - Remaining keywords go loose (AND by default).
+4. Call:
+
+```
+mcp__github__search_issues   (or search_pull_requests)
+  query   = "<repo filter> <is:type> <content>"
+  perPage = min(20, query-knowledge limit)
+```
+
+For each returned item, format:
+
+```
+- #<number> <state> | <repo> → <title>
+  <author>, <short updated date>
+```
+
+If the query is about **commits** ("last commits", "recent changes", "who
+changed X"), call `mcp__github__list_commits` per connected repo (it needs
+`owner`/`repo`, not a search string); in global mode ask the user to name a repo
+(there's no global commit search). For the full body of one item ("open that
+PR/issue"), call `mcp__github__pull_request_read` or `mcp__github__issue_read`.
+
+If nothing comes back, report: "No issue/PR matches `<built query>`. Try more
+general terms or widen the time range."
+
+**3e. `datadog` handler:**
+
+Datadog has **no MCP wired in this environment yet**, so there's no live data to
+fetch. Read the page frontmatter (`scopes`) so you can describe *what* is
+connected, then tell the user plainly that Datadog isn't reachable live yet and
+to connect its MCP (open `/mcp` in Claude Code) — e.g. "Datadog is set up to
+watch <scopes>, but I can't pull it live yet: connect the Datadog MCP via `/mcp`
+and I'll resolve it." **Never** fall back to the page body keywords as if they
+were an answer (see the realtime rule below). The moment a Datadog MCP exists,
+wire its search/monitor tools here mirroring the gmail/slack handlers.
 
 ### 4. Answer the user (synthesized — no vbrain internals)
 

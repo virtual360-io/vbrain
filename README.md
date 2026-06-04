@@ -72,7 +72,7 @@ JSON on stdout (read by the skills), human-readable text on stderr. Subcommands:
 | `vbrain resolve-links --map M` / `vbrain linkify` | resolve/convert wikilinks |
 | `vbrain commit [--no-push]`  | idempotent commit + push (go-git or system git) |
 | `vbrain routines [--dry-run]` / `vbrain routine-add` / `vbrain routine-list` | scheduling (cron) |
-| `vbrain realtime <gcalendar\|gmail\|slack> --json …` | connect a realtime source |
+| `vbrain realtime <gcalendar\|gmail\|slack\|github\|datadog> --json …` | connect a realtime source |
 | `vbrain tags` / `vbrain stats` / `vbrain query-log` | insights/maintenance |
 | `vbrain install` / `vbrain update` | install or update the binary, then sync skills + base + routines — aliases, brew-aware |
 | `vbrain version` (`--version`/`-v`) | print the binary's version |
@@ -83,7 +83,7 @@ JSON on stdout (read by the skills), human-readable text on stderr. Subcommands:
 |---|---|
 | `/vbrain-add-knowledge <path\|url>` | Ingest → `raw/` → LLM chunker → LLM wiki-writer → `vbrain write-pages` → reindex → commit |
 | `/vbrain-query-knowledge <query>`   | `vbrain query`; `kind: realtime` pages trigger an MCP handler instead of a snippet |
-| `/vbrain-add-realtime-knowledge`    | Connect a realtime source (Google Calendar/Gmail/Slack via MCP) and create a phantom page |
+| `/vbrain-add-realtime-knowledge`    | Connect a realtime source (Google Calendar/Gmail/Slack/GitHub via MCP, Datadog config-only) and create a phantom page |
 | `/vbrain-add-routine`               | Add a routine (slug, description, cron, prompt) |
 | `/vbrain-routine [slug\|status]`    | Watch: claim due routines via `vbrain routines`, parallel dispatch, re-arm `/loop 15m` |
 

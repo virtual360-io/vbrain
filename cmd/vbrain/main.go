@@ -468,10 +468,10 @@ func dueEntry(r routines.Routine, claimedAt *string) map[string]any {
 }
 
 // cmdRealtime connects a realtime source: writes the config and the phantom page.
-// usage: vbrain realtime <gcalendar|gmail|slack> --json '<json>' | --file <path>
+// usage: vbrain realtime <gcalendar|gmail|slack|github|datadog> --json '<json>' | --file <path>
 func cmdRealtime(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: vbrain realtime <gcalendar|gmail|slack> --json '<json>'")
+		return fmt.Errorf("usage: vbrain realtime <gcalendar|gmail|slack|github|datadog> --json '<json>'")
 	}
 	source := args[0]
 	fs := flag.NewFlagSet("realtime", flag.ContinueOnError)
@@ -490,7 +490,7 @@ func cmdRealtime(args []string) error {
 		raw = b
 	}
 
-	keys := map[string]string{"gcalendar": "calendars", "gmail": "labels", "slack": "channels"}
+	keys := map[string]string{"gcalendar": "calendars", "gmail": "labels", "slack": "channels", "github": "repos", "datadog": "scopes"}
 	key, ok := keys[source]
 	if !ok {
 		return fmt.Errorf("unknown realtime source: %q", source)
@@ -534,6 +534,25 @@ func cmdRealtime(args []string) error {
 		} else {
 			out["mode"] = "filtered"
 		}
+	case "github":
+		if saved, err = (realtime.GitHub{}).SaveConfig(items); err != nil {
+			return err
+		}
+		wikiAbs, err = realtime.GitHub{}.WriteWikiPage(saved)
+		out["config_path"] = realtime.GitHub{}.ConfigPath()
+		out["repos"] = saved
+		if (realtime.GitHub{}).Global(saved) {
+			out["mode"] = "global"
+		} else {
+			out["mode"] = "filtered"
+		}
+	case "datadog":
+		if saved, err = (realtime.Datadog{}).SaveConfig(items); err != nil {
+			return err
+		}
+		wikiAbs, err = realtime.Datadog{}.WriteWikiPage(saved)
+		out["config_path"] = realtime.Datadog{}.ConfigPath()
+		out["scopes"] = saved
 	}
 	if err != nil {
 		return err

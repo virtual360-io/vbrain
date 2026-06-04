@@ -1,7 +1,7 @@
 ---
 name: vbrain-add-realtime-knowledge
-description: Connects a "realtime knowledge" source to vbrain (today: Google Calendar, Gmail, and Slack via MCP). Creates a phantom page in wiki/_realtime/ with kind=realtime that matches in FTS5 and fires a live handler in /vbrain-query-knowledge. Use when the user asks "connect my gcalendar", "connect my gmail", "connect my slack", "add my calendar", "I want to search agenda/email/slack too", or "vbrain-add-realtime-knowledge".
-allowed-tools: Bash, Read, AskUserQuestion, mcp__claude_ai_Google_Calendar__list_calendars, mcp__claude_ai_Gmail__list_labels, mcp__claude_ai_Slack__slack_search_channels
+description: Connects a "realtime knowledge" source to vbrain (today: Google Calendar, Gmail, Slack, GitHub, and Datadog via MCP). Creates a phantom page in wiki/_realtime/ with kind=realtime that matches in FTS5 and fires a live handler in /vbrain-query-knowledge. Use when the user asks "connect my gcalendar", "connect my gmail", "connect my slack", "connect my github", "connect my datadog", "add my calendar", "I want to search agenda/email/slack/github/datadog too", or "vbrain-add-realtime-knowledge".
+allowed-tools: Bash, Read, AskUserQuestion, mcp__claude_ai_Google_Calendar__list_calendars, mcp__claude_ai_Gmail__list_labels, mcp__claude_ai_Slack__slack_search_channels, mcp__github__search_repositories
 ---
 
 # vbrain-add-realtime-knowledge
@@ -15,16 +15,19 @@ returning the body.
 ## Inputs
 
 - **source** (optional): which source to enable. Supported today: `gcalendar`,
-  `gmail`, `slack`. If absent, ask the user via `AskUserQuestion`.
+  `gmail`, `slack`, `github`, `datadog`. If absent, ask the user via
+  `AskUserQuestion`.
 
 ## Supported sources
 
-| `source`    | Status     | Deterministic command            |
+| `source`    | Status            | Deterministic command            |
 |---|---|---|
-| `gcalendar` | supported  | `vbrain realtime gcalendar`      |
-| `gmail`     | supported  | `vbrain realtime gmail`          |
-| `slack`     | supported  | `vbrain realtime slack`          |
-| other       | improvise  | ask the user for connection details |
+| `gcalendar` | supported         | `vbrain realtime gcalendar`      |
+| `gmail`     | supported         | `vbrain realtime gmail`          |
+| `slack`     | supported         | `vbrain realtime slack`          |
+| `github`    | supported         | `vbrain realtime github`         |
+| `datadog`   | config only (no live handler yet) | `vbrain realtime datadog` |
+| other       | improvise         | ask the user for connection details |
 
 ## Steps
 
@@ -36,7 +39,9 @@ If the user didn't pass `source`, use `AskUserQuestion`:
 > 1. Google Calendar (`gcalendar`)
 > 2. Gmail (`gmail`)
 > 3. Slack (`slack`)
-> 4. Other (describe)
+> 4. GitHub (`github`)
+> 5. Datadog (`datadog`)
+> 6. Other (describe)
 
 If the answer is "other" or an unsupported value, ask the user to describe the
 source. Ask whether they want you to create a deterministic source (with a
@@ -235,15 +240,132 @@ The command writes `~/vbrain/config/realtime/slack.yml` + the phantom page at
 the commit message to `"realtime: connect slack (<mode>)"`, where `<mode>` is
 "global" or "<N> channels").
 
+### 2quater. `github` flow
+
+Like Slack, GitHub accepts an **empty repo list = global search** across every
+repo the user can access; a populated list filters by those repos (GitHub search
+OR-combines repeated `repo:owner/name` qualifiers, so the query-knowledge handler
+makes a single call — see `/vbrain-query-knowledge`, section 3d).
+
+**2quater-a. Check the MCP's auth.** Try `mcp__github__search_repositories` with
+any term (e.g. `query: "user:<the user>"`, minimal page). If it errors with an
+auth/not-connected message, stop and instruct:
+> "To connect GitHub, open `/mcp` in Claude Code, select the **GitHub** server,
+> and authorize. When you're back, call me again with
+> `/vbrain-add-realtime-knowledge github`."
+Don't try to bypass it.
+
+**2quater-b. Ask for the scope** via `AskUserQuestion` (single select):
+> "Which GitHub repositories to connect?"
+> 1. All (every accessible repo) — global search, no `repo:` filter.
+> 2. Specific repos — you tell me `owner/name`.
+
+- If **All**: `repos = []` (global mode). Skip to 2quater-d.
+- If **Specific repos**: ask for them (free text, e.g.
+  "virtual360-io/vbrain, acme/api"). For each, you may confirm it exists with
+  `mcp__github__search_repositories` (`query: "repo:<owner>/<name>"`); if it
+  doesn't resolve, warn the user and proceed with the ones that did. Build the
+  `repos` list with `{owner, name}`.
+
+**Fallback if `AskUserQuestion` isn't available**: connect in **global** mode
+(`repos = []`) and warn:
+> "I connected GitHub in global mode (every accessible repo). To restrict to
+> repos, run `/vbrain-add-realtime-knowledge github` in an interactive session or
+> edit `~/vbrain/config/realtime/github.yml` (add `{owner, name}` objects to the
+> `repos` key) and run `vbrain reindex`."
+
+**2quater-c. Build JSON and run the vbrain binary:**
+
+```bash
+vbrain realtime github --json '<JSON>'
+```
+
+Where `<JSON>` has the `repos` key, each item `{"owner": "...", "name": "..."}`.
+For global mode, pass `{"repos":[]}`. Examples:
+
+```json
+{"repos":[]}
+```
+```json
+{"repos":[
+  {"owner":"virtual360-io","name":"vbrain"},
+  {"owner":"acme","name":"api"}
+]}
+```
+
+The command writes `~/vbrain/config/realtime/github.yml` + the phantom page at
+`~/vbrain/wiki/_realtime/github.md` and returns JSON with `mode`
+(`global`|`filtered`), `config_path`, `wiki_path`, and `repos`.
+
+**2quater-d. Reindex and commit** (same commands as gcalendar; commit message
+`"realtime: connect github (<mode>)"`, where `<mode>` is "global" or
+"<N> repos").
+
+### 2quinquies. `datadog` flow
+
+⚠️ Datadog is **config-only today**: there's no Datadog MCP wired, so the live
+handler in `/vbrain-query-knowledge` is documented but pending. This flow still
+creates the config + phantom page (so the source is discoverable in FTS5 and
+ready the moment a handler exists), but you **must warn** the user that queries
+won't resolve live yet. Do **not** try to fetch Datadog data here.
+
+**2quinquies-a. Ask which scopes to watch** via `AskUserQuestion`
+(`multiSelect: true`):
+> "What should Datadog bring? (you can pick more than one)"
+> 1. Monitors & alerts (`monitor`)
+> 2. Incidents (`incident`)
+> 3. Dashboards & metrics (`dashboard`)
+
+Optionally ask for a tag filter per scope (free text, e.g. `service:vbrain`,
+`env:prod`) — leave empty for "all". If the user picks nothing, pass an empty
+list (`{"scopes":[]}` = all supported kinds, no tag filter).
+
+**Fallback if `AskUserQuestion` isn't available**: connect with all kinds and no
+tag filter (`{"scopes":[]}`) and warn the user they can refine later by editing
+`~/vbrain/config/realtime/datadog.yml` and running `vbrain reindex`.
+
+**2quinquies-b. Build JSON and run the vbrain binary:**
+
+```bash
+vbrain realtime datadog --json '<JSON>'
+```
+
+Where `<JSON>` has the `scopes` key, each item `{"kind": "...", "tag": "..."}`.
+`kind` ∈ {`monitor`, `incident`, `dashboard`} (synonyms like `alerts`/`metrics`
+are normalized; unknown kinds are dropped). Example:
+
+```json
+{"scopes":[
+  {"kind":"monitor","tag":"service:vbrain"},
+  {"kind":"incident","tag":""}
+]}
+```
+
+The command writes `~/vbrain/config/realtime/datadog.yml` + the phantom page at
+`~/vbrain/wiki/_realtime/datadog.md` and returns JSON with `config_path`,
+`wiki_path`, and `scopes`.
+
+**2quinquies-c. Reindex and commit** (same commands as gcalendar; commit message
+`"realtime: connect datadog (<N> scopes)"`).
+
+**2quinquies-d. Warn** in the final report that Datadog has no live handler yet:
+> "Datadog is connected as a knowledge source, but I can't pull it live until a
+> Datadog MCP is wired — a query that matches it will tell you to connect the
+> MCP. The config and page are ready for that day."
+
 ### 3. Report
 
 Show the user:
-- The list of connected calendars/labels/channels (or "global mode" for slack)
+- The list of connected calendars/labels/channels/repos/scopes (or "global mode"
+  for slack/github)
 - The config path (`~/vbrain/config/realtime/<source>.yml`)
 - The phantom page path (`wiki/_realtime/<source>.md`)
 - Next step: "now ask something like 'do I have a meeting tomorrow?' (gcalendar),
-  'any email from client X this week?' (gmail), or 'what did people say on Slack
-  about the deploy?' (slack) in `/vbrain-query-knowledge` — I'll pull it live."
+  'any email from client X this week?' (gmail), 'what did people say on Slack
+  about the deploy?' (slack), or 'any open PRs on vbrain?' (github) in
+  `/vbrain-query-knowledge` — I'll pull it live."
+- For **datadog**, instead say it's connected as a source but can't resolve live
+  yet (no MCP wired) — see 2quinquies-d.
 
 ## Rules
 
@@ -251,9 +373,12 @@ Show the user:
   only. Listing calendars/labels is OK; fetching events/threads is
   `/vbrain-query-knowledge`'s job.
 - **Never** write into `wiki/_realtime/` by hand for supported sources
-  (gcalendar/gmail/slack): always go through the vbrain binary. For "other"
-  sources with no command, writing directly is OK but warn the user that without
-  a handler it won't resolve live.
+  (gcalendar/gmail/slack/github/datadog): always go through the vbrain binary.
+  For "other" sources with no command, writing directly is OK but warn the user
+  that without a handler it won't resolve live.
+- **Datadog** is config-only today (no MCP handler): create the config + page,
+  but always warn the user that queries won't resolve live until a Datadog MCP is
+  wired. Don't pretend it pulls data.
 - If the source's MCP fails (not connected, no permission), stop and guide the
   user to open `/mcp` in Claude Code to authorize before re-running. Don't try
   to bypass the authentication.
