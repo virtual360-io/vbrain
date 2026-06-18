@@ -84,25 +84,43 @@ func InstallSkills(dir string, skills fs.FS) (int, error) {
 		}
 		return 0, err
 	}
-	dest := filepath.Join(dir, ".claude", "skills")
-	if err := os.MkdirAll(dest, 0o755); err != nil {
-		return 0, err
-	}
-	count := 0
+	var names []string
 	for _, e := range entries {
-		if !e.IsDir() {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	installed, _, err := InstallNamedSkills(dir, skills, names)
+	return len(installed), err
+}
+
+// InstallNamedSkills copies only the named skills (subdirectories of skills, by
+// dir name) into <dir>/.claude/skills/<name>, each target removed first
+// (idempotent). Names absent from skills are returned in `missing` (not an
+// error), so a caller re-syncing a recorded set tolerates a skill that vanished
+// from a newer embed. This is the primitive behind both InstallSkills (all) and
+// the optional-skills install/sync (a subset).
+func InstallNamedSkills(dir string, skills fs.FS, names []string) (installed, missing []string, err error) {
+	dest := filepath.Join(dir, ".claude", "skills")
+	if err = os.MkdirAll(dest, 0o755); err != nil {
+		return nil, nil, err
+	}
+	for _, name := range names {
+		fi, statErr := fs.Stat(skills, name)
+		if statErr != nil || !fi.IsDir() {
+			missing = append(missing, name)
 			continue
 		}
-		target := filepath.Join(dest, e.Name())
-		if err := os.RemoveAll(target); err != nil {
-			return count, err
+		target := filepath.Join(dest, name)
+		if err = os.RemoveAll(target); err != nil {
+			return installed, missing, err
 		}
-		if err := copyTreeFS(skills, e.Name(), target); err != nil {
-			return count, err
+		if err = copyTreeFS(skills, name, target); err != nil {
+			return installed, missing, err
 		}
-		count++
+		installed = append(installed, name)
 	}
-	return count, nil
+	return installed, missing, nil
 }
 
 // copyTreeFS copies srcDir (within fsys) to dstDir on disk.

@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/virtual360-io/vbrain/internal/scaffold"
 	"github.com/virtual360-io/vbrain/internal/search"
 	"github.com/virtual360-io/vbrain/internal/selfupdate"
+	"github.com/virtual360-io/vbrain/internal/skills"
 	"github.com/virtual360-io/vbrain/internal/soulwrite"
 	"github.com/virtual360-io/vbrain/internal/writepages"
 )
@@ -42,7 +44,7 @@ var version = "dev"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: vbrain <reindex|query|ingest|write-pages|soul-write|resolve-links|commit|routines|realtime|install|update|version> [args]")
+		fmt.Fprintln(os.Stderr, "usage: vbrain <reindex|query|ingest|write-pages|soul-write|resolve-links|commit|routines|realtime|skill|install|update|version> [args]")
 		os.Exit(2)
 	}
 	var err error
@@ -80,6 +82,8 @@ func main() {
 		err = cmdRoutineAdd(os.Args[2:])
 	case "routine-list":
 		err = cmdRoutineList(os.Args[2:])
+	case "skill", "skills":
+		err = cmdSkill(os.Args[2:])
 	case "install", "update":
 		err = cmdInstall(os.Args[2:])
 	case "__bootstrap": // internal: re-exec'd by install/update on the freshly-installed binary
@@ -383,7 +387,7 @@ func cmdResolveLinks(args []string) error {
 
 func cmdIngest(args []string) error {
 	fs := flag.NewFlagSet("ingest", flag.ContinueOnError)
-	typeOverride := fs.String("type", "", "force the source type (text|url|tweet)")
+	typeOverride := fs.String("type", "", "force the source type (text|url|tweet|google-transcript)")
 	force := fs.Bool("force", false, "ingest even if sha256 is duplicate")
 
 	flagArgs, positionals := splitArgs(args)
@@ -807,12 +811,12 @@ func cmdInstall(args []string) error {
 // __bootstrap (update path) so both pull skills and routine defaults from the
 // running binary's embed — never a stale, already-running older process.
 func syncAssets(out map[string]any, github, repoName, token string) error {
-	skills, err := embeddedSkills()
+	skillsFS, err := embeddedSkills()
 	if err != nil {
 		return err
 	}
 	if home, err := os.UserHomeDir(); err == nil {
-		n, err := scaffold.InstallSkills(home, skills)
+		n, err := scaffold.InstallSkills(home, skillsFS)
 		if err != nil {
 			return err
 		}
@@ -871,6 +875,12 @@ func embeddedSkills() (iofs.FS, error) {
 	return iofs.Sub(root.SkillsFS, ".claude/skills")
 }
 
+// embeddedOptionalSkills returns the FS of the embedded optional skills, rooted
+// at .claude/optional-skills.
+func embeddedOptionalSkills() (iofs.FS, error) {
+	return iofs.Sub(root.OptionalSkillsFS, ".claude/optional-skills")
+}
+
 // bootstrapBase does dirs + CLAUDE.md + skills in the base + git init + seed +
 // commit + (optional) GitHub repo creation/push. Fills out.
 func bootstrapBase(out map[string]any, github, repoName, token string) error {
@@ -884,12 +894,24 @@ func bootstrapBase(out map[string]any, github, repoName, token string) error {
 	}
 	out["claude_md"] = true
 
-	if skills, err := embeddedSkills(); err == nil {
-		n, err := scaffold.InstallSkills(dataHome, skills)
+	if skillsFS, err := embeddedSkills(); err == nil {
+		n, err := scaffold.InstallSkills(dataHome, skillsFS)
 		if err != nil {
 			return err
 		}
 		out["skills_installed"] = n
+	}
+
+	// Keep installed optional skills current: reinstall (from THIS binary's
+	// embed) the ones already present in the base, into base + global home. A
+	// no-op on a fresh base; on update it's what pulls a new release's version.
+	if optFS, err := embeddedOptionalSkills(); err == nil {
+		home, _ := os.UserHomeDir()
+		res, err := skills.Sync(optFS, dataHome, home)
+		if err != nil {
+			return err
+		}
+		out["optional_skills_synced"] = res.Synced
 	}
 
 	if !git.RepoInitialized(dataHome) {
@@ -1194,4 +1216,155 @@ func printMarkdown(res search.Result) {
 		}
 		fmt.Println()
 	}
+}
+
+// cmdSkill manages OPTIONAL skills (list/install/remove/update). JSON on stdout,
+// human text on stderr. "Installed" = present in the base; install/remove mirror
+// into the global ~/.claude/skills and commit the base locally.
+func cmdSkill(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: vbrain skill <list|install|remove|update> [name]")
+	}
+	optFS, err := embeddedOptionalSkills()
+	if err != nil {
+		return err
+	}
+	home, _ := os.UserHomeDir()
+	base := paths.DataHome()
+	switch args[0] {
+	case "list":
+		return cmdSkillList(optFS, base)
+	case "install":
+		return cmdSkillInstall(optFS, base, home, args[1:])
+	case "remove", "uninstall":
+		return cmdSkillRemove(optFS, base, home, args[1:])
+	case "update", "sync":
+		return cmdSkillUpdate(optFS, base, home)
+	default:
+		return fmt.Errorf("unknown skill subcommand: %q (use list|install|remove|update)", args[0])
+	}
+}
+
+func cmdSkillList(optFS iofs.FS, base string) error {
+	cat, err := skills.Catalog(optFS, base)
+	if err != nil {
+		return err
+	}
+	for _, e := range cat {
+		mark := " "
+		if e.Installed {
+			mark = "x"
+		}
+		fmt.Fprintf(os.Stderr, "[%s] %s — %s\n", mark, e.Name, e.Description)
+	}
+	return emitJSON(map[string]any{"optional": cat})
+}
+
+func cmdSkillInstall(optFS iofs.FS, base, home string, args []string) error {
+	if len(args) < 1 || args[0] == "" {
+		return fmt.Errorf("usage: vbrain skill install <name>")
+	}
+	name := args[0]
+	if err := skills.Install(optFS, name, base, home); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "→ installed optional skill %q\n", name)
+	out := map[string]any{"installed": name}
+
+	// If the skill declares a daily routine, set it up now: on a terminal, ask
+	// the time (deterministic HH:MM→cron); otherwise surface it as
+	// suggested_routine so the driving agent can offer it (natural-language time
+	// via /vbrain-add-routine).
+	if sug, err := skills.SuggestedRoutine(optFS, name); err == nil && sug != nil {
+		if created := maybeCreateRoutine(sug); created != nil {
+			out["routine_created"] = created
+		} else {
+			out["suggested_routine"] = sug
+			fmt.Fprintf(os.Stderr, "→ this skill runs best as a daily routine; set it with /vbrain-add-routine (slug %q)\n", sug.Slug)
+		}
+	}
+	out["committed"] = commitBaseIfRepo(base, "chore(skill): install "+name)
+	return emitJSON(out)
+}
+
+// maybeCreateRoutine, only on a terminal, asks for a daily time and creates the
+// skill's suggested routine. Returns the created routine summary, or nil when
+// not a terminal / skipped / invalid time.
+func maybeCreateRoutine(sug *skills.RoutineSuggestion) map[string]any {
+	if !isTerminal() {
+		return nil
+	}
+	return createRoutineFromTime(sug, prompt(fmt.Sprintf("Run %q once a day? Enter a time HH:MM (empty to skip): ", sug.Slug)))
+}
+
+// createRoutineFromTime creates the suggested routine from an HH:MM answer, or
+// returns nil for an empty/invalid answer. Split from the terminal I/O so the
+// creation path is testable without a TTY.
+func createRoutineFromTime(sug *skills.RoutineSuggestion, ans string) map[string]any {
+	cron, ok := hhmmToCron(ans)
+	if !ok {
+		if strings.TrimSpace(ans) != "" {
+			fmt.Fprintf(os.Stderr, "→ %q isn't HH:MM; skipping (create later with /vbrain-add-routine)\n", ans)
+		}
+		return nil
+	}
+	if _, err := routines.Add(sug.Slug, sug.Description, sug.Prompt, &cron, true, true, time.Now()); err != nil {
+		fmt.Fprintf(os.Stderr, "→ could not create routine: %v\n", err)
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "→ created daily routine %q (%s). Run /vbrain-routine to start the watch loop.\n", sug.Slug, cron)
+	return map[string]any{"slug": sug.Slug, "schedule": cron}
+}
+
+// hhmmToCron turns "07:30" (or "7:30") into the daily cron "30 7 * * *".
+func hhmmToCron(s string) (string, bool) {
+	h, m, ok := strings.Cut(strings.TrimSpace(s), ":")
+	if !ok {
+		return "", false
+	}
+	hi, err1 := strconv.Atoi(h)
+	mi, err2 := strconv.Atoi(m)
+	if err1 != nil || err2 != nil || hi < 0 || hi > 23 || mi < 0 || mi > 59 {
+		return "", false
+	}
+	return fmt.Sprintf("%d %d * * *", mi, hi), true
+}
+
+func cmdSkillRemove(optFS iofs.FS, base, home string, args []string) error {
+	if len(args) < 1 || args[0] == "" {
+		return fmt.Errorf("usage: vbrain skill remove <name>")
+	}
+	name := args[0]
+	was, err := skills.Remove(optFS, name, base, home)
+	if err != nil {
+		return err
+	}
+	committed := false
+	if was {
+		committed = commitBaseIfRepo(base, "chore(skill): remove "+name)
+	}
+	return emitJSON(map[string]any{"removed": name, "was_installed": was, "committed": committed})
+}
+
+func cmdSkillUpdate(optFS iofs.FS, base, home string) error {
+	res, err := skills.Sync(optFS, base, home)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "→ synced %d optional skill(s)\n", len(res.Synced))
+	return emitJSON(map[string]any{"synced": res.Synced})
+}
+
+// commitBaseIfRepo commits the base locally (no push) after a skill change, so
+// the versioned state (the installed skill dir + presence) isn't left
+// uncommitted. Best-effort: a failed commit is a warning, not an error.
+func commitBaseIfRepo(base, msg string) bool {
+	if !git.RepoInitialized(base) {
+		return false
+	}
+	if _, err := git.Commit(msg, base); err != nil {
+		fmt.Fprintf(os.Stderr, "→ warning: base commit failed: %v\n", err)
+		return false
+	}
+	return true
 }

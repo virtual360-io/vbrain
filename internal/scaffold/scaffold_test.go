@@ -94,3 +94,44 @@ func TestInstallSkillsIdempotentDoesNotNest(t *testing.T) {
 		t.Error("should not nest vbrain-foo/vbrain-foo")
 	}
 }
+
+func TestInstallNamedSkillsInstallsOnlyTheSubset(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	for _, name := range []string{"vbrain-foo", "vbrain-bar"} {
+		os.MkdirAll(filepath.Join(src, name), 0o755)
+		os.WriteFile(filepath.Join(src, name, "SKILL.md"), []byte("x"), 0o644)
+	}
+
+	installed, missing, err := scaffold.InstallNamedSkills(dir, os.DirFS(src), []string{"vbrain-foo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(installed) != 1 || installed[0] != "vbrain-foo" || len(missing) != 0 {
+		t.Fatalf("installed=%v missing=%v", installed, missing)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "vbrain-foo", "SKILL.md")); err != nil {
+		t.Errorf("vbrain-foo not installed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "vbrain-bar")); !os.IsNotExist(err) {
+		t.Error("vbrain-bar should NOT have been installed (not in the named subset)")
+	}
+}
+
+func TestInstallNamedSkillsReportsMissing(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	os.MkdirAll(filepath.Join(src, "vbrain-foo"), 0o755)
+	os.WriteFile(filepath.Join(src, "vbrain-foo", "SKILL.md"), []byte("x"), 0o644)
+
+	installed, missing, err := scaffold.InstallNamedSkills(dir, os.DirFS(src), []string{"vbrain-foo", "ghost"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(installed) != 1 || installed[0] != "vbrain-foo" {
+		t.Fatalf("installed=%v", installed)
+	}
+	if len(missing) != 1 || missing[0] != "ghost" {
+		t.Fatalf("missing=%v, want [ghost]", missing)
+	}
+}

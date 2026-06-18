@@ -285,6 +285,64 @@ CREATE TABLE pages (
 	}
 }
 
+func TestRawSourcesCheckAcceptsGoogleTranscript(t *testing.T) {
+	d := openMem(t)
+	if _, err := d.Exec(
+		"INSERT INTO raw_sources (path, original_filename, source_type, sha256) VALUES (?, ?, ?, ?)",
+		"raw/x.vtt", "x.vtt", "google-transcript", "deadbeef",
+	); err != nil {
+		t.Fatalf("google-transcript source_type should be accepted: %v", err)
+	}
+}
+
+// An existing base whose raw_sources CHECK predates 'google-transcript' must be
+// widened WITHOUT dropping rows (raw_sources is the dedup log, not derived from
+// wiki/). The pre-existing row survives and the new type then inserts cleanly.
+func TestMigrateWidensRawSourcesTypeCheckPreservingRows(t *testing.T) {
+	d, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	d.SetMaxOpenConns(1)
+
+	if _, err := d.Exec(`
+CREATE TABLE raw_sources (
+  id                INTEGER PRIMARY KEY,
+  path              TEXT NOT NULL UNIQUE,
+  original_filename TEXT NOT NULL,
+  source_type       TEXT NOT NULL CHECK(source_type IN ('text','url','tweet','oneshot')),
+  sha256            TEXT NOT NULL UNIQUE,
+  ingested_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(
+		"INSERT INTO raw_sources (id, path, original_filename, source_type, sha256) VALUES (7, ?, ?, ?, ?)",
+		"raw/old.md", "old.md", "text", "oldsha",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Migrate(d); err != nil {
+		t.Fatal(err)
+	}
+
+	var fn string
+	if err := d.QueryRow("SELECT original_filename FROM raw_sources WHERE id = 7").Scan(&fn); err != nil {
+		t.Fatalf("pre-existing raw_sources row must be preserved: %v", err)
+	}
+	if fn != "old.md" {
+		t.Fatalf("got %q, want old.md", fn)
+	}
+	if _, err := d.Exec(
+		"INSERT INTO raw_sources (path, original_filename, source_type, sha256) VALUES (?, ?, ?, ?)",
+		"raw/new.vtt", "new.vtt", "google-transcript", "newsha",
+	); err != nil {
+		t.Fatalf("after migration a google-transcript row must insert: %v", err)
+	}
+}
+
 func insertPage(t *testing.T, d *sql.DB, path, title, sha string) int64 {
 	t.Helper()
 	res, err := d.Exec(

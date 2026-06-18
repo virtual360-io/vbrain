@@ -19,8 +19,9 @@ type Ingestable interface {
 }
 
 // Registry defines the precedence order: Twitter beats URL (a tweet is a URL),
-// which beats Text.
-var Registry = []Source{Twitter{}, URL{}, Text{}}
+// which beats Text. GoogleTranscript sits before Text because a .vtt is valid
+// UTF-8 and Text's catch-all would otherwise claim it.
+var Registry = []Source{Twitter{}, URL{}, GoogleTranscript{}, Text{}}
 
 // Detect returns the first Source that recognizes the input, or nil.
 func Detect(input string) Source {

@@ -11,3 +11,12 @@ import "embed"
 //
 //go:embed all:.claude/skills
 var SkillsFS embed.FS
+
+// OptionalSkillsFS holds .claude/optional-skills/** — skills NOT installed by
+// default. The user opts in via `vbrain skill install <name>`; once installed
+// they're kept current on every `vbrain update` (reinstalled from this embed).
+// go:embed requires the directory to be non-empty, so it ships with at least one
+// optional skill.
+//
+//go:embed all:.claude/optional-skills
+var OptionalSkillsFS embed.FS

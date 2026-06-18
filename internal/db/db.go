@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS raw_sources (
   id                INTEGER PRIMARY KEY,
   path              TEXT NOT NULL UNIQUE,
   original_filename TEXT NOT NULL,
-  source_type       TEXT NOT NULL CHECK(source_type IN ('text','url','tweet','oneshot')),
+  source_type       TEXT NOT NULL CHECK(source_type IN ('text','url','tweet','oneshot','google-transcript')),
   sha256            TEXT NOT NULL UNIQUE,
   ingested_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -108,13 +108,17 @@ func Open(path string) (*sql.DB, error) {
 	return sqlDB, nil
 }
 
-// Migrate applies the schema (idempotent) and rebuilds pages if the old CHECK
-// (without the newest kind, 'soul') is present.
+// Migrate applies the schema (idempotent), rebuilds pages if the old CHECK
+// (without the newest kind, 'soul') is present, and widens the raw_sources
+// source_type CHECK for newly added source types (e.g. 'google-transcript').
 func Migrate(db *sql.DB) error {
 	if _, err := db.Exec(SchemaSQL); err != nil {
 		return err
 	}
-	return rebuildPagesIfOldKindCheck(db)
+	if err := rebuildPagesIfOldKindCheck(db); err != nil {
+		return err
+	}
+	return migrateRawSourcesTypeCheck(db)
 }
 
 // rebuildPagesIfOldKindCheck drops pages/fts/triggers and recreates the schema
@@ -144,5 +148,42 @@ DROP TABLE IF EXISTS pages;
 		return err
 	}
 	_, err = db.Exec(SchemaSQL)
+	return err
+}
+
+// migrateRawSourcesTypeCheck recreates raw_sources, preserving its rows, when the
+// source_type CHECK predates a newly added type (here 'google-transcript').
+// SQLite can't ALTER a CHECK, so we copy into a table with the wider CHECK and
+// swap. Unlike pages, raw_sources is NOT derived from wiki/ (it's the ingest +
+// dedup log), so rows are carried over instead of dropped. Idempotent: a no-op
+// once the new type is present (or when there's no CHECK at all).
+func migrateRawSourcesTypeCheck(db *sql.DB) error {
+	var ddl sql.NullString
+	if err := db.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name='raw_sources'").Scan(&ddl); err != nil || !ddl.Valid {
+		return nil
+	}
+	if !strings.Contains(ddl.String, "CHECK(source_type IN") || strings.Contains(ddl.String, "'google-transcript'") {
+		return nil
+	}
+	// foreign_keys can't be toggled inside a transaction; bracket the rebuild.
+	if _, err := db.Exec("PRAGMA foreign_keys=OFF"); err != nil {
+		return err
+	}
+	defer db.Exec("PRAGMA foreign_keys=ON")
+	const mig = `
+CREATE TABLE raw_sources_new (
+  id                INTEGER PRIMARY KEY,
+  path              TEXT NOT NULL UNIQUE,
+  original_filename TEXT NOT NULL,
+  source_type       TEXT NOT NULL CHECK(source_type IN ('text','url','tweet','oneshot','google-transcript')),
+  sha256            TEXT NOT NULL UNIQUE,
+  ingested_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+INSERT INTO raw_sources_new (id, path, original_filename, source_type, sha256, ingested_at)
+  SELECT id, path, original_filename, source_type, sha256, ingested_at FROM raw_sources;
+DROP TABLE raw_sources;
+ALTER TABLE raw_sources_new RENAME TO raw_sources;
+`
+	_, err := db.Exec(mig)
 	return err
 }

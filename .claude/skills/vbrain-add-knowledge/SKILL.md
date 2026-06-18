@@ -12,8 +12,9 @@ raw file into wiki pages indexed in vbrain.
 ## Inputs
 
 - **path** (required): absolute path to the file OR a URL (http/https).
-- **--type** (optional): force the `source_type` (`text` | `url` | `tweet`)
-  when the heuristic detection is wrong. Only include it if the user asks.
+- **--type** (optional): force the `source_type` (`text` | `url` | `tweet` |
+  `google-transcript`) when the heuristic detection is wrong. Only include it if
+  the user asks.
 
 ## Supported sources
 
@@ -21,6 +22,7 @@ raw file into wiki pages indexed in vbrain.
 |---|---|---|
 | `tweet` | URL `twitter.com|x.com/<user>/status/<id>` | Public syndication endpoint (`cdn.syndication.twimg.com`) + headless Chrome to pull the full body of linked X Articles |
 | `url` | Other http(s) URLs | Jina Reader (`r.jina.ai`) — returns clean markdown |
+| `google-transcript` | `.vtt` file or a `WEBVTT` header (a Google Meet transcript Doc saved to a file) | Deterministic WebVTT parser → clean transcript, one block per speaker turn |
 | `text` | `.md`, `.txt`, extensionless + UTF-8 | passthrough |
 
 ## Steps
@@ -69,7 +71,7 @@ vbrain ingest <path>
 
 Parse the output JSON. Possible cases:
 
-- `{"source_type":"text"|"url"|"tweet","raw_id":N,"raw_path":...,"extracted_path":...}` → proceed to step 2.
+- `{"source_type":"text"|"url"|"tweet"|"google-transcript","raw_id":N,"raw_path":...,"extracted_path":...}` → proceed to step 2.
 - `{"duplicate":true,"raw_id":N,...}` → this file's sha256 already exists. Ask
   the user whether to reprocess (`--force`) or abort.
 - `{"source_type":"unknown",...}` **OR** the deterministic extraction returned

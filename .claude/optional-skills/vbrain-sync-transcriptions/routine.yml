@@ -1,0 +1,11 @@
+# Daily routine this skill suggests at install time. The schedule (time) is NOT
+# here — `vbrain skill install` asks for it (HH:MM on a terminal) or an agent
+# offers it via /vbrain-add-routine.
+slug: sync-transcriptions
+description: Ingest Google Meet transcripts from Gmail into vbrain
+prompt: |
+  Invoke the /vbrain-sync-transcriptions skill (no args). It searches Gmail for
+  unprocessed Google Meet transcripts, ingests each one sequentially (one
+  sub-agent per email), and archives + marks read only the ones that ingested
+  successfully. Return its report: processed, pages created, archived, skipped
+  (duplicates/trivial), failures.
